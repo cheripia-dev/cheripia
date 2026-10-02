@@ -22,7 +22,7 @@ import { installShutdownSignalHandlers } from './shutdown-handler.js';
 const logger = new Logger('core', 'cyan');
 const bootLogger = logger.createSubLogger('boot', 'magenta');
 
-const themeColor = chalk.hex('#ffa9c3');
+const themeColor = chalk.hex('#ffccd8');
 
 /** 起動時の案内を、選択されたログ形式に合わせて出力します。 */
 function greet(props: { version: string; format: LogFormat, basedCherrypickVersion: string, basedMisskeyVersion: string }) {
@@ -38,16 +38,16 @@ function greet(props: { version: string; format: LogFormat, basedCherrypickVersi
 
 	if (!envOption.quiet) {
 		//#region Cheripia logo
-		console.log(chalk.hex('#ffa9c3').bold('  ____ _               _') + chalk.hex('#95e3e8').bold('       _       '));
-		console.log(chalk.hex('#ffa9c3').bold(' / ___| |__   ___ _ __(_)') + chalk.hex('#95e3e8').bold('_ __ (_) __ _ '));
-		console.log(chalk.hex('#ffa9c3').bold('| |   | \'_ \\ / _ \\ \'__| |') + chalk.hex('#95e3e8').bold(' \'_ \\| |/ _` |'));
-		console.log(chalk.hex('#ffa9c3').bold('| |___| | | |  __/ |  | |') + chalk.hex('#95e3e8').bold(' |_) | | (_| |'));
-		console.log(chalk.hex('#ffa9c3').bold(' \\____|_| |_|\\___|_|  |_|') + chalk.hex('#95e3e8').bold(' .__/|_|\\__,_|'));
-		console.log(chalk.hex('#ffa9c3').bold('                        ') + chalk.hex('#95e3e8').bold('|_|            '));
+		console.log(chalk.hex('#ffccd8').bold('  ____ _               _       _       '));
+		console.log(chalk.hex('#ffccd8').bold(' / ___| |__   ___ _ __(_)_ __ (_) __ _ '));
+		console.log(chalk.hex('#ffccd8').bold('| |   | \'_ \\ / _ \\ \'__| | \'_ \\| |/ _` |'));
+		console.log(chalk.hex('#ffccd8').bold('| |___| | | |  __/ |  | | |_) | | (_| |'));
+		console.log(chalk.hex('#ffccd8').bold(' \\____|_| |_|\\___|_|  |_| .__/|_|\\__,_|'));
+		console.log(chalk.hex('#ffccd8').bold('                        |_|            '));
 		//#endregion
 
-		console.log(chalk.hex('#ffa9c3').bold(' Cheri') + chalk.hex('#95e3e8').bold('pia') + (' is an open-source decentralized microblogging platform based from') + (chalk.hex('#9ec23f').bold(' Misskey') + (' and') + chalk.hex('#ffa9c3').bold(' Cherry') + chalk.hex('#95e3e8').bold('Pick') + '.'));
-		// console.log(chalk.hex('#ffa9c3').bold(' KOKO') + chalk.hex('#95e3e8').bold('NECT') + chalk.hex('#ffa9c3')(' with') + chalk.hex('#95e3e8').bold(' NoriDev.'));
+		console.log(chalk.hex('#ffccd8').bold(' Cheripia') + (' is an open-source decentralized microblogging platform based from') + (chalk.hex('#9ec23f').bold(' Misskey') + (' and') + chalk.hex('#ffccd8').bold(' Cherry') + chalk.hex('#95e3e8').bold('Pick') + '.'));
+		// console.log(chalk.hex('#573d45').bold(' KOKO') + chalk.hex('#95e3e8').bold('NECT') + chalk.hex('#ffccd8')(' with') + chalk.hex('#95e3e8').bold(' NoriDev.'));
 
 		console.log('');
 		console.log(chalkTemplate`--- ${os.hostname()} {gray (PID: ${process.pid.toString()})} ---`);
@@ -81,7 +81,7 @@ export async function masterMain() {
 		process.exit(1);
 	}
 
-	bootLogger.succ(chalk.hex('#ffa9c3')('Cherry') + chalk.hex('#95e3e8')('Pick') + (' initialized'));
+	bootLogger.succ(chalk.hex('#ffccd8')('Cheripia') + (' initialized'));
 
 	initExtraThreadPool(config);
 
