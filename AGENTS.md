@@ -22,7 +22,7 @@
    - `node scripts/check-spdx.mjs` を 1 回実行し、欠落は `--fix` で補う。
      `SPDX: OK` なら追加の目視確認はしない
    - このCheripiaプロジェクトでは、新規ファイルに `SPDX-FileCopyrightText: syuilo and misskey-project, cheripia team` を優先して使用する (`syuilo and misskey-project` のみでも問題ない)。
-     既存ファイルの `yojo-art team` 表記は書き換えない
+     既存ファイルの `yojo-art team` や `cherrypick-project` 表記は書き換えない
    - `packages/misskey-js` は MIT ライセンスのサブパッケージなので、この AGPL ヘッダーを一律に付けない (サブパッケージ固有の `package.json` / `LICENSE` / 既存ファイルのヘッダーに従う)
 
 2. **`locales/ja-JP.yml` 以外の locale YAML を手動編集しない**
