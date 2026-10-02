@@ -143,6 +143,7 @@ function getColor(name: string | null): string | null {
 			return '#43BBE5';
 		case 'cherrypick':
 			return '#ffa9c3';
+		case 'cheripia':
 		case 'yojo-art':
 			return '#ffbcdc';
 		case 'mastodon':
