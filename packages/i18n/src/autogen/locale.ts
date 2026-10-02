@@ -10293,12 +10293,6 @@ export interface Locale extends ILocale {
              */
             "community": string;
         };
-        "_cheripia": {
-            /**
-             * Cheripiaに寄付
-             */
-            "donate": string;
-        };
     };
     "_displayOfSensitiveMedia": {
         /**

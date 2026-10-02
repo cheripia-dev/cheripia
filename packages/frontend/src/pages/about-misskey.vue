@@ -123,7 +123,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 							<img src="https://avatars.githubusercontent.com/u/98575220?v=4" :class="$style.contributorAvatar">
 							<span :class="$style.contributorUsername">@kozakura913
 								<span :class="$style.contributorClient">
-									<span :class="$style.cherry">Cheri</span><span :class="$style.pick">pia</span>
+									<span :class="$style.cherry">Cheripia</span>
+								</span>
+							</span>
+						</a>
+						<a href="https://github.com/4sterisk" target="_blank" :class="$style.contributor">
+							<img src="https://avatars.githubusercontent.com/u/146138447?v=4" :class="$style.contributorAvatar">
+							<span :class="$style.contributorUsername">@4sterisk
+								<span :class="$style.contributorClient">
+									<span :class="$style.cherry">Cheripia</span>
 								</span>
 							</span>
 						</a>
@@ -436,7 +444,7 @@ const patronsWithIconWithMisskey = [{
 }];
 
 const patronsWithCheripia = [
-	'しろは',
+	'',
 ];
 
 const patronsWithCherryPick = [

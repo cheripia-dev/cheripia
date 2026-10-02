@@ -2686,8 +2686,6 @@ _aboutMisskey:
     donate: "CherryPickに寄付"
     relayServer: "リレーサーバー"
     community: "コミュニティー"
-  _cheripia:
-    donate: "Cheripiaに寄付"
 
 _displayOfSensitiveMedia:
   respect: "センシティブ設定されたメディアを隠す"
