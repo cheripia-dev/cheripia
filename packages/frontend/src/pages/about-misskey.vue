@@ -218,7 +218,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</FormSection>
 				<FormSection>
 					<template #label><Mfm text="$[jelly ❤]"/> {{ i18n.ts._aboutMisskey.patrons }}</template>
-					<p style="font-weight: bold">Cheripia</p>
+					<!---<p style="font-weight: bold">Cheripia</p>
 					<div :class="$style.patronsWithIcon">
 						<div v-for="patron in patronsWithIconWithCheripia" :class="$style.patronWithIcon">
 							<img :src="patron.icon" :class="$style.patronIcon">
@@ -227,7 +227,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</div>
 					<div style="margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); grid-gap: 12px;">
 						<div v-for="patron in patronsWithCheripia" :key="patron">{{ patron }}</div>
-					</div>
+					</div>-->
 					<p style="font-weight: bold;">
 						<span style="color: var(--CP-cherry);">Cherry</span>
 						<span style="color: var(--CP-pick);">Pick</span>
