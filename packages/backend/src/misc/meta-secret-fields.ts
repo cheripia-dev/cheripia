@@ -1,0 +1,20 @@
+/*
+ * SPDX-FileCopyrightText: syuilo and misskey-project, cheripia team
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+export const META_SECRET_FIELDS = [
+	'hcaptchaSecretKey',
+	'mcaptchaSecretKey',
+	'recaptchaSecretKey',
+	'turnstileSecretKey',
+	'smtpPass',
+	'swPrivateKey',
+	'objectStorageSecretKey',
+	'deeplAuthKey',
+	'verifymailAuthKey',
+	'truemailAuthKey',
+	'remoteObjectStorageSecretKey',
+	'ctav3SaKey',
+	'libreTranslateApiKey',
+] as const;
