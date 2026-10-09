@@ -130,6 +130,18 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 		);
 	}
 
+	/**
+	 * リモートのデコレーションは、APIで返す際に元のURL (rawUrl) にメディアプロキシのURLを付与する
+	 * 以前のリモートのデコレーションは url にプロキシURLを保存しているため、url ではなく rawUrl を使う
+	 * rawUrl の無い古いリモートのデコレーションは url がプロキシURLなので、二重にプロキシしないようそのまま返す (ユーザーの更新時に rawUrl が保存される)
+	 */
+	@bindThis
+	public getPublicUrl(decoration: Pick<MiAvatarDecoration, 'url' | 'rawUrl' | 'host'>): string {
+		if (decoration.host == null) return decoration.url;
+		if (!decoration.rawUrl) return decoration.url;
+		return this.getProxiedUrl(decoration.rawUrl, 'avatar');
+	}
+
 	@bindThis
 	public async remoteUserUpdate(user: MiUser): Promise<string> {
 		const userHost = user.host ?? '';
@@ -194,7 +206,7 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 			const decorationData = {
 				name: name,
 				description: description,
-				url: this.getProxiedUrl(avatarDecoration.url, 'avatar'),
+				url: avatarDecoration.url,
 				remoteId: avatarDecorationId,
 				host: userHost,
 				rawUrl: avatarDecoration.url,
