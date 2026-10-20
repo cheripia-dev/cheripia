@@ -4,18 +4,28 @@
  */
 
 import * as fs from 'node:fs';
-import sharp from 'sharp';
-import { sharpBmp } from '@misskey-dev/sharp-read-bmp';
+import type { ProcessOptions } from '@yojo-art/media-proxy-napi';
 import type { Config } from '@/config.js';
 import { FILE_TYPE_BROWSERSAFE } from '@/const.js';
 import { StatusError } from '@/misc/status-error.js';
 import { contentDisposition } from '@/misc/content-disposition.js';
 import { correctFilename } from '@/misc/correct-filename.js';
-import { isMimeImage } from '@/misc/is-mime-image.js';
-import { IImageStreamable, ImageProcessingService, webpDefault } from '@/core/ImageProcessingService.js';
+import type { IImageStreamable } from '@/core/ImageProcessingService.js';
+import { ImageProcessingService } from '@/core/ImageProcessingService.js';
 import { createRangeStream, attachStreamCleanup, needsCleanup } from './FileServerUtils.js';
 import type { DownloadedFileResult, FileResolveResult, FileServerFileResolver } from './FileServerFileResolver.js';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+
+const MEDIA_PROCESSOR_ERROR_CODES = new Set<string>([
+	'Unsupported',
+	'DecodeLimit',
+	'Decode',
+	'Encode',
+	'BadgeSkipped',
+	'Overloaded',
+	'Timeout',
+	'Internal',
+]);
 
 type ProxySource = DownloadedFileResult | FileResolveResult;
 type CleanupableFile = ProxySource & { cleanup: () => void };
@@ -131,102 +141,48 @@ export class FileServerProxyHandler {
 	): Promise<IImageStreamable> {
 		const query = request.query;
 
-		const requiresImageConversion = 'emoji' in query || 'avatar' in query || 'static' in query || 'preview' in query || 'badge' in query;
-		const isConvertibleImage = isMimeImage(file.mime, 'sharp-convertible-image-with-bmp');
-		if (requiresImageConversion && !isConvertibleImage) {
-			throw new StatusError('Unexpected mime', 404);
+		const options: ProcessOptions = {
+			emoji: 'emoji' in query,
+			avatar: 'avatar' in query,
+			static: 'static' in query,
+			preview: 'preview' in query,
+			badge: 'badge' in query,
+		};
+
+		const requiresImageConversion = options.emoji || options.avatar || options.static || options.preview || options.badge;
+
+		if (!requiresImageConversion && file.mime !== 'image/svg+xml') {
+			if (!file.mime.startsWith('image/') || !FILE_TYPE_BROWSERSAFE.includes(file.mime)) {
+				throw new StatusError('Rejected type', 403, 'Rejected type');
+			}
+
+			return this.createDefaultStream(file, request, reply);
 		}
 
-		if ('emoji' in query || 'avatar' in query) {
-			return this.processEmojiOrAvatar(file, query);
+		try {
+			return await this.imageProcessingService.processFile(file.path, {
+				...options,
+				contentType: file.mime,
+			});
+		} catch (e) {
+			throw this.translateImageProcessingError(e);
 		}
-
-		if ('static' in query) {
-			return this.imageProcessingService.convertSharpToWebpStream(await sharpBmp(file.path, file.mime), 498, 422);
-		}
-
-		if ('preview' in query) {
-			return this.imageProcessingService.convertSharpToWebpStream(await sharpBmp(file.path, file.mime), 200, 200);
-		}
-
-		if ('badge' in query) {
-			return this.processBadge(file);
-		}
-
-		if (file.mime === 'image/svg+xml') {
-			return this.imageProcessingService.convertToWebpStream(file.path, 2048, 2048);
-		}
-
-		if (!file.mime.startsWith('image/') || !FILE_TYPE_BROWSERSAFE.includes(file.mime)) {
-			throw new StatusError('Rejected type', 403, 'Rejected type');
-		}
-
-		return this.createDefaultStream(file, request, reply);
 	}
 
-	/**
-	 * 絵文字またはアバター用の画像を処理する
-	 */
-	private async processEmojiOrAvatar(
-		file: AvailableFile,
-		query: Pick<ProxyQuery, 'emoji' | 'avatar' | 'static'>,
-	): Promise<IImageStreamable> {
-		const isAnimationConvertibleImage = isMimeImage(file.mime, 'sharp-animation-convertible-image-with-bmp');
-		if (!isAnimationConvertibleImage && !('static' in query)) {
-			return {
-				data: fs.createReadStream(file.path),
-				ext: file.ext,
-				type: file.mime,
-			};
+	private translateImageProcessingError(error: unknown): Error {
+		if (!(error instanceof Error)) return new Error(String(error));
+
+		const code = (error as Error & { code?: unknown }).code;
+		if (typeof code !== 'string' || !MEDIA_PROCESSOR_ERROR_CODES.has(code)) return error;
+
+		switch (code) {
+			case 'BadgeSkipped':
+				return new StatusError('Skip to provide badge', 404);
+			case 'Unsupported':
+				return new StatusError('Unexpected mime', 404, 'Unexpected mime');
+			default:
+				return new StatusError(`Image processing failed (${code})`, 502, code);
 		}
-
-		const data = (await sharpBmp(file.path, file.mime, { animated: !('static' in query) }))
-			.resize({
-				height: 'emoji' in query ? 128 : 320,
-				withoutEnlargement: true,
-			})
-			.webp(webpDefault);
-
-		return {
-			data,
-			ext: 'webp',
-			type: 'image/webp',
-		};
-	}
-
-	/**
-	 * バッジ用の画像を処理する
-	 */
-	private async processBadge(file: AvailableFile): Promise<IImageStreamable> {
-		const mask = (await sharpBmp(file.path, file.mime))
-			.resize(96, 96, {
-				fit: 'contain',
-				position: 'centre',
-				withoutEnlargement: false,
-			})
-			.greyscale()
-			.normalise()
-			.linear(1.75, -(128 * 1.75) + 128) // 1.75x contrast
-			.flatten({ background: '#000' })
-			.toColorspace('b-w');
-
-		const stats = await mask.clone().stats();
-
-		if (stats.entropy < 0.1) {
-			throw new StatusError('Skip to provide badge', 404);
-		}
-
-		const data = sharp({
-			create: { width: 96, height: 96, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
-		})
-			.pipelineColorspace('b-w')
-			.boolean(await mask.png().toBuffer(), 'eor');
-
-		return {
-			data: await data.png().toBuffer(),
-			ext: 'png',
-			type: 'image/png',
-		};
 	}
 
 	/**

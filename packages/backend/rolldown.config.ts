@@ -94,6 +94,7 @@ export default defineConfig((args) => {
 		'@nestjs/microservices/microservices-module',
 		'@nestjs/microservices',
 		/^@napi-rs\/.*/,
+		/^@yojo-art\/media-proxy-napi.*/,
 		'mock-aws-s3',
 		'aws-sdk',
 		'nock',

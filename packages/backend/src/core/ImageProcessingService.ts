@@ -3,9 +3,12 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { Injectable } from '@nestjs/common';
-import sharp from 'sharp';
-import type { Sharp, WebpOptions, AvifOptions } from 'sharp';
+import * as fs from 'node:fs';
+import type { Readable } from 'node:stream';
+import { Injectable, type OnModuleInit } from '@nestjs/common';
+import { MediaProcessor } from '@yojo-art/media-proxy-napi';
+import type { MediaProcessorOptions, ProcessOptions } from '@yojo-art/media-proxy-napi';
+import { bindThis } from '@/decorators.js';
 
 export type IImage = {
 	data: Buffer;
@@ -19,148 +22,60 @@ export type IImageStream = {
 	type: string;
 };
 
-export type IImageSharp = {
-	data: Sharp;
-	ext: string | null;
-	type: string;
-};
+export type IImageStreamable = IImage | IImageStream;
 
-export type IImageStreamable = IImage | IImageStream | IImageSharp;
+const DEFAULT_MAX_PIXELS = 2048;
 
-export const webpDefault: WebpOptions = {
-	quality: 77,
-	alphaQuality: 95,
-	lossless: false,
-	nearLossless: false,
-	smartSubsample: true,
-	mixed: true,
-	effort: 2,
-	loop: 0,
-};
-
-export const avifDefault: AvifOptions = {
-	quality: 60,
-	lossless: false,
-	effort: 2,
-};
-
-import { bindThis } from '@/decorators.js';
-import { Readable } from 'node:stream';
+/**
+ * media-proxy-napi には「リサイズしない」オプションが無いため、
+ * 実用上リサイズされない napi の許容最大値を noResize 用として使う。
+ */
+const NO_RESIZE_MAX_PIXELS = 16383;
 
 @Injectable()
-export class ImageProcessingService {
-	constructor(
-	) {
-	}
+export class ImageProcessingService implements OnModuleInit {
+	private readonly processor: MediaProcessor;
+	private readonly noResizeProcessor: MediaProcessor;
 
-	/**
-	 * Convert to WebP
-	 *   with resize, remove metadata, resolve orientation, stop animation
-	 */
-	@bindThis
-	public async convertToWebp(path: string, width: number, height: number, options: WebpOptions = webpDefault): Promise<IImage> {
-		return this.convertSharpToWebp(sharp(path), width, height, options);
-	}
-
-	@bindThis
-	public async convertSharpToWebp(sharp: Sharp, width: number, height: number, options: WebpOptions = webpDefault): Promise<IImage> {
-		const result = this.convertSharpToWebpStream(sharp, width, height, options);
-
-		return {
-			data: await result.data.toBuffer(),
-			ext: result.ext,
-			type: result.type,
+	constructor() {
+		const options: MediaProcessorOptions = {
+			loadSystemFonts: true,
 		};
+		this.processor = new MediaProcessor({ ...options, maxPixels: DEFAULT_MAX_PIXELS });
+		this.noResizeProcessor = new MediaProcessor({ ...options, maxPixels: NO_RESIZE_MAX_PIXELS });
 	}
 
 	@bindThis
-	public convertToWebpStream(path: string, width: number, height: number, options: WebpOptions = webpDefault): IImageSharp {
-		return this.convertSharpToWebpStream(sharp(path), width, height, options);
+	public async onModuleInit(): Promise<void> {
+		await Promise.all([
+			this.processor.preloadFonts(),
+			this.noResizeProcessor.preloadFonts(),
+		]);
 	}
 
 	@bindThis
-	public convertSharpToWebpStream(sharp: Sharp, width: number, height: number, options: WebpOptions = webpDefault): IImageSharp {
-		const data = sharp
-			.resize(width, height, {
-				fit: 'inside',
-				withoutEnlargement: true,
-			})
-			.rotate()
-			.webp(options);
+	public async process(src: Buffer, options: ProcessOptions = {}): Promise<IImage> {
+		return await this.convert(this.processor, src, options);
+	}
+
+	@bindThis
+	public async processWithoutResize(src: Buffer, options: ProcessOptions = {}): Promise<IImage> {
+		return await this.convert(this.noResizeProcessor, src, options);
+	}
+
+	@bindThis
+	public async processFile(path: string, options: ProcessOptions = {}): Promise<IImage> {
+		return await this.process(await fs.promises.readFile(path), options);
+	}
+
+	private async convert(processor: MediaProcessor, src: Buffer, options: ProcessOptions): Promise<IImage> {
+		const result = await processor.process(src, options);
 
 		return {
-			data,
-			ext: 'webp',
-			type: 'image/webp',
-		};
-	}
-
-	/**
-	 * Convert to Avif
-	 *   with resize, remove metadata, resolve orientation, stop animation
-	 */
-	@bindThis
-	public async convertToAvif(path: string, width: number, height: number, options: AvifOptions = avifDefault): Promise<IImage> {
-		return this.convertSharpToAvif(sharp(path), width, height, options);
-	}
-
-	@bindThis
-	public async convertSharpToAvif(sharp: Sharp, width: number, height: number, options: AvifOptions = avifDefault): Promise<IImage> {
-		const result = this.convertSharpToAvifStream(sharp, width, height, options);
-
-		return {
-			data: await result.data.toBuffer(),
-			ext: result.ext,
-			type: result.type,
-		};
-	}
-
-	@bindThis
-	public convertToAvifStream(path: string, width: number, height: number, options: AvifOptions = avifDefault): IImageSharp {
-		return this.convertSharpToAvifStream(sharp(path), width, height, options);
-	}
-
-	@bindThis
-	public convertSharpToAvifStream(sharp: Sharp, width: number, height: number, options: AvifOptions = avifDefault): IImageSharp {
-		const data = sharp
-			.resize(width, height, {
-				fit: 'inside',
-				withoutEnlargement: true,
-			})
-			.rotate()
-			.avif(options);
-
-		return {
-			data,
-			ext: 'avif',
-			type: 'image/avif',
-		};
-	}
-
-	/**
-	 * Convert to PNG
-	 *   with resize, remove metadata, resolve orientation, stop animation
-	 */
-	@bindThis
-	public async convertToPng(path: string, width: number, height: number): Promise<IImage> {
-		return this.convertSharpToPng(sharp(path), width, height);
-	}
-
-	@bindThis
-	public async convertSharpToPng(sharp: Sharp, width: number, height: number): Promise<IImage> {
-		const data = await sharp
-			.resize(width, height, {
-				fit: 'inside',
-				withoutEnlargement: true,
-			})
-			.rotate()
-			.png()
-			.toBuffer();
-
-		return {
-			data,
-			ext: 'png',
-			type: 'image/png',
+			data: result.data,
+			// napi は ".webp" のようにドット付きで返すため、IImage の規約 (ドット無し) に合わせる
+			ext: result.ext.startsWith('.') ? result.ext.slice(1) : result.ext,
+			type: result.contentType,
 		};
 	}
 }
