@@ -245,8 +245,8 @@ importers:
         specifier: 4.11.3
         version: 4.11.3
       '@yojo-art/media-proxy-napi':
-        specifier: 1.0.1
-        version: 1.0.1
+        specifier: 1.1.1
+        version: 1.1.1
       '@zip.js/zip.js':
         specifier: 2.8.60
         version: 2.8.60
@@ -4661,34 +4661,34 @@ packages:
     engines: {node: '>=14.6'}
     deprecated: this version has critical issues, please update to the latest version
 
-  '@yojo-art/media-proxy-napi-darwin-arm64@1.0.1':
-    resolution: {integrity: sha512-YB1e7R06N7Dw98p74m87Ou0Ztgt8R2qNs2OsSGvccRLwoRZfHyEQldgDaIhRdpg/2AAeAgz0wtZAAcDWD63oPg==}
+  '@yojo-art/media-proxy-napi-darwin-arm64@1.1.1':
+    resolution: {integrity: sha512-Ii9FL7IDAuyezcvDwsvf72kqORFSzFm11LvYdJXvILAB6B/cLFWaK2fek5E49Jxa/k+U1JdBOeAoPfTXtaqiYg==}
     engines: {node: '>= 22'}
     cpu: [arm64]
     os: [darwin]
 
-  '@yojo-art/media-proxy-napi-linux-arm64-gnu@1.0.1':
-    resolution: {integrity: sha512-YLtwrbTjJ/Vqi1l7g2e1f4GRHLqRDRPlO4hzGPL35xmip23jQmcECRkc50D0Lxsm0uEJ7WgbuW7odaSTluyDlw==}
+  '@yojo-art/media-proxy-napi-linux-arm64-gnu@1.1.1':
+    resolution: {integrity: sha512-fTpaSQSxpV871wBjgwjElyykTNBNZYdLKwHsB6CWGIpC4eZgC261AuW74NK9XsEHLzv87twOgtr+Xd/5wWa5pg==}
     engines: {node: '>= 22'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@yojo-art/media-proxy-napi-linux-x64-gnu@1.0.1':
-    resolution: {integrity: sha512-Qfa++ZHy6rT0UNPzBjGbjVWu4LBINgkZ9YAAOLsqT1O+6ygNCZenqGb8O/FkhA0GxY584wdPFfIVpQxo6+lVKQ==}
+  '@yojo-art/media-proxy-napi-linux-x64-gnu@1.1.1':
+    resolution: {integrity: sha512-ITd7h3Akii2pYg/afmTPnoJG1SarRaWmHbpFCmFPO3xmnLBH9xD+eO4h3a4OnqLmqEzXDI63P78pAqlmlwzInQ==}
     engines: {node: '>= 22'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@yojo-art/media-proxy-napi-win32-x64-msvc@1.0.1':
-    resolution: {integrity: sha512-B2z2Ml+8a0VJXrNcjEo1KCTMUaP51D589FgQ0EttGQlWbYw2pXzuZ3DF59KzQyqeLGcaJkzA3SMhPe7XsDINtA==}
+  '@yojo-art/media-proxy-napi-win32-x64-msvc@1.1.1':
+    resolution: {integrity: sha512-k8JvqFXnfrbRuq8CNx59X8oHCTL9+a2vv+iWSpUP1DKIVv2Nh0z/ZToCuWGXr0HfcokgGTNZx9CGB2TB0EMVUg==}
     engines: {node: '>= 22'}
     cpu: [x64]
     os: [win32]
 
-  '@yojo-art/media-proxy-napi@1.0.1':
-    resolution: {integrity: sha512-+XmtJVJEHqiJAUJpqYB3ytQ48qmemfpv6Or4hW+HlJ9GpDC+4XB5focYa/ytu9FRlXb5jJLIxzl07M+ICxJXxw==}
+  '@yojo-art/media-proxy-napi@1.1.1':
+    resolution: {integrity: sha512-8FbPivjVNl5OK0ACFRMZufONs0lRxHHGj7prVG54Ecr4C44tVyO+I4WwABQ3GzGWe3Xjx7CnCxjGdUKb08fIlA==}
     engines: {node: '>= 22'}
 
   '@zip.js/zip.js@2.8.60':
@@ -13434,24 +13434,24 @@ snapshots:
   '@xmldom/xmldom@0.9.10':
     optional: true
 
-  '@yojo-art/media-proxy-napi-darwin-arm64@1.0.1':
+  '@yojo-art/media-proxy-napi-darwin-arm64@1.1.1':
     optional: true
 
-  '@yojo-art/media-proxy-napi-linux-arm64-gnu@1.0.1':
+  '@yojo-art/media-proxy-napi-linux-arm64-gnu@1.1.1':
     optional: true
 
-  '@yojo-art/media-proxy-napi-linux-x64-gnu@1.0.1':
+  '@yojo-art/media-proxy-napi-linux-x64-gnu@1.1.1':
     optional: true
 
-  '@yojo-art/media-proxy-napi-win32-x64-msvc@1.0.1':
+  '@yojo-art/media-proxy-napi-win32-x64-msvc@1.1.1':
     optional: true
 
-  '@yojo-art/media-proxy-napi@1.0.1':
+  '@yojo-art/media-proxy-napi@1.1.1':
     optionalDependencies:
-      '@yojo-art/media-proxy-napi-darwin-arm64': 1.0.1
-      '@yojo-art/media-proxy-napi-linux-arm64-gnu': 1.0.1
-      '@yojo-art/media-proxy-napi-linux-x64-gnu': 1.0.1
-      '@yojo-art/media-proxy-napi-win32-x64-msvc': 1.0.1
+      '@yojo-art/media-proxy-napi-darwin-arm64': 1.1.1
+      '@yojo-art/media-proxy-napi-linux-arm64-gnu': 1.1.1
+      '@yojo-art/media-proxy-napi-linux-x64-gnu': 1.1.1
+      '@yojo-art/media-proxy-napi-win32-x64-msvc': 1.1.1
 
   '@zip.js/zip.js@2.8.60': {}
 

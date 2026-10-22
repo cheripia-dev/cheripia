@@ -86,6 +86,12 @@ type UploadFromUrlArgs = {
 	requestHeaders?: Record<string, string> | null;
 };
 
+const LOSSLESS_WEBPUBLIC_MIME_TYPES = new Set([
+	'image/png',
+	'image/bmp',
+	'image/svg+xml',
+]);
+
 @Injectable()
 export class DriveService {
 	public static NoSuchFolderError = class extends Error {};
@@ -515,9 +521,10 @@ export class DriveService {
 					: await this.registryApiService.getItem(userId, null, ['client', 'base'], 'imageCompressionMode');
 				this.registerLogger.debug(compressMode?.value);
 				const noResize = compressMode?.value === 'noResizeCompress' || compressMode?.value === 'noResizeCompressLossy';
+				const lossless = LOSSLESS_WEBPUBLIC_MIME_TYPES.has(type);
 				webpublic = noResize
-					? await this.imageProcessingService.processWithoutResize(src)
-					: await this.imageProcessingService.process(src);
+					? await this.imageProcessingService.processWithoutResize(src, { lossless })
+					: await this.imageProcessingService.process(src, { lossless });
 			} catch (err) {
 				this.registerLogger.warn('web image not created (an error occurred)', err as Error);
 			}
@@ -532,7 +539,9 @@ export class DriveService {
 		let thumbnail: IImage | null = null;
 
 		try {
-			thumbnail = await this.imageProcessingService.process(src, { static: true });
+			thumbnail = isAnimated
+				? await this.imageProcessingService.process(src, { width: 374, height: 317, webpQuality: 80 })
+				: await this.imageProcessingService.process(src, { static: true, width: 498, height: 422 });
 		} catch (err) {
 			this.registerLogger.warn('thumbnail not created (an error occurred)', err as Error);
 		}

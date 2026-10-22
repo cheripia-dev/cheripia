@@ -25,6 +25,7 @@ export type IImageStream = {
 export type IImageStreamable = IImage | IImageStream;
 
 const DEFAULT_MAX_PIXELS = 2048;
+const DEFAULT_WEBP_QUALITY = 77;
 
 /**
  * media-proxy-napi には「リサイズしない」オプションが無いため、
@@ -69,7 +70,7 @@ export class ImageProcessingService implements OnModuleInit {
 	}
 
 	private async convert(processor: MediaProcessor, src: Buffer, options: ProcessOptions): Promise<IImage> {
-		const result = await processor.process(src, options);
+		const result = await processor.process(src, { webpQuality: DEFAULT_WEBP_QUALITY, ...options });
 
 		return {
 			data: result.data,
