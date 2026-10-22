@@ -40,7 +40,7 @@ minimumReleaseAge: 10080 # delay 7days to mitigate supply-chain attack
 minimumReleaseAgeExclude:
   - '@misskey-dev/*'
   - '@syuilo/aiscript'
-  - '@yojo-art/media-proxy-napi*'
+  - '@cheripia-dev/media-proxy-napi*'
   - buraha
   - mfm-js
   - slacc

@@ -175,6 +175,9 @@ importers:
       '@aws-sdk/lib-storage':
         specifier: 3.1121.0
         version: 3.1121.0(@aws-sdk/client-s3@3.1121.0)
+      '@cheripia-dev/media-proxy-napi':
+        specifier: 1.1.2
+        version: 1.1.2
       '@fastify/accepts':
         specifier: 5.0.4
         version: 5.0.4
@@ -244,9 +247,6 @@ importers:
       '@smithy/node-http-handler':
         specifier: 4.11.3
         version: 4.11.3
-      '@yojo-art/media-proxy-napi':
-        specifier: 1.1.1
-        version: 1.1.1
       '@zip.js/zip.js':
         specifier: 2.8.60
         version: 2.8.60
@@ -1713,6 +1713,36 @@ packages:
   '@canvas/image-data@1.1.0':
     resolution: {integrity: sha512-QdObRRjRbcXGmM1tmJ+MrHcaz1MftF2+W7YI+MsphnsCrmtyfS0d5qJbk0MeSbUeyM/jCb0hmnkXPsy026L7dA==}
 
+  '@cheripia-dev/media-proxy-napi-darwin-arm64@1.1.2':
+    resolution: {integrity: sha512-YU5HaG5G1/s1rbOxqf3tCGhacXP3CYx2mSq3/DFYsHhBkMi4YZxkrWTYKHMKk/O5PITqBg3oHxebguv7na2n7Q==}
+    engines: {node: '>= 22'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@cheripia-dev/media-proxy-napi-linux-arm64-gnu@1.1.2':
+    resolution: {integrity: sha512-wrRhVIN0zf3g1g/3Z6kyXz+f2OujOjXZiXAaHlRX0kcU00r22loCJVX5+fdHoBdP2J7o4XfJgFpQEmB71yI2xg==}
+    engines: {node: '>= 22'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@cheripia-dev/media-proxy-napi-linux-x64-gnu@1.1.2':
+    resolution: {integrity: sha512-tQbG1LPhWO0FJ390GFplSXryFnkeUaMyKstPWBjhV1N9valIL6ng+W59ytsJPyrR+gCnpt8cDyyEtrw13Cojgg==}
+    engines: {node: '>= 22'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@cheripia-dev/media-proxy-napi-win32-x64-msvc@1.1.2':
+    resolution: {integrity: sha512-voX+5bqc403u08rE6h/IxeJYVYaIm0HJWvraKbBNHhDwLzhZaI8wLSc/eRBQrDWD+On8KQXxIXRvBOD6Sp8C/Q==}
+    engines: {node: '>= 22'}
+    cpu: [x64]
+    os: [win32]
+
+  '@cheripia-dev/media-proxy-napi@1.1.2':
+    resolution: {integrity: sha512-Iqc1AfERUciAVGS803c/Ts6th8ZVXzfxqNaQ7qbO5+ai7+iDihg0BVQ35fNiyqy02Mv7WT9i9iRcr/4YGGpKDA==}
+    engines: {node: '>= 22'}
+
   '@cropper/element-canvas@2.2.0':
     resolution: {integrity: sha512-H0Ay2ZSZrxWLP/8fSudH9hghsgIJh9fCgEmpfzD7MnQbE8HdQKljnoRxbrjuFT7Y0rmf405Sp9PmNA6T4twegw==}
 
@@ -2876,6 +2906,7 @@ packages:
   '@opentelemetry/sdk-trace-base@2.11.0':
     resolution: {integrity: sha512-H19x/TX/LZdqiYOjM7fqtSxwlplC5pgelavqbQdHbhdq0q/AI/TGkM2dfGuuynTXmJPeF2HoZVoPDu+TGoW78A==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
@@ -4660,36 +4691,6 @@ packages:
     resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
     engines: {node: '>=14.6'}
     deprecated: this version has critical issues, please update to the latest version
-
-  '@yojo-art/media-proxy-napi-darwin-arm64@1.1.1':
-    resolution: {integrity: sha512-Ii9FL7IDAuyezcvDwsvf72kqORFSzFm11LvYdJXvILAB6B/cLFWaK2fek5E49Jxa/k+U1JdBOeAoPfTXtaqiYg==}
-    engines: {node: '>= 22'}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@yojo-art/media-proxy-napi-linux-arm64-gnu@1.1.1':
-    resolution: {integrity: sha512-fTpaSQSxpV871wBjgwjElyykTNBNZYdLKwHsB6CWGIpC4eZgC261AuW74NK9XsEHLzv87twOgtr+Xd/5wWa5pg==}
-    engines: {node: '>= 22'}
-    cpu: [arm64]
-    os: [linux]
-    libc: [glibc]
-
-  '@yojo-art/media-proxy-napi-linux-x64-gnu@1.1.1':
-    resolution: {integrity: sha512-ITd7h3Akii2pYg/afmTPnoJG1SarRaWmHbpFCmFPO3xmnLBH9xD+eO4h3a4OnqLmqEzXDI63P78pAqlmlwzInQ==}
-    engines: {node: '>= 22'}
-    cpu: [x64]
-    os: [linux]
-    libc: [glibc]
-
-  '@yojo-art/media-proxy-napi-win32-x64-msvc@1.1.1':
-    resolution: {integrity: sha512-k8JvqFXnfrbRuq8CNx59X8oHCTL9+a2vv+iWSpUP1DKIVv2Nh0z/ZToCuWGXr0HfcokgGTNZx9CGB2TB0EMVUg==}
-    engines: {node: '>= 22'}
-    cpu: [x64]
-    os: [win32]
-
-  '@yojo-art/media-proxy-napi@1.1.1':
-    resolution: {integrity: sha512-8FbPivjVNl5OK0ACFRMZufONs0lRxHHGj7prVG54Ecr4C44tVyO+I4WwABQ3GzGWe3Xjx7CnCxjGdUKb08fIlA==}
-    engines: {node: '>= 22'}
 
   '@zip.js/zip.js@2.8.60':
     resolution: {integrity: sha512-pULv0waMlnKAUUxrsuAOa0ADONGRuhdHORtuXVgClNlScDB5YjImCV8DZrE1SicaROyE6MwGkH8CLJ+o4Nx07g==}
@@ -10308,6 +10309,25 @@ snapshots:
 
   '@canvas/image-data@1.1.0': {}
 
+  '@cheripia-dev/media-proxy-napi-darwin-arm64@1.1.2':
+    optional: true
+
+  '@cheripia-dev/media-proxy-napi-linux-arm64-gnu@1.1.2':
+    optional: true
+
+  '@cheripia-dev/media-proxy-napi-linux-x64-gnu@1.1.2':
+    optional: true
+
+  '@cheripia-dev/media-proxy-napi-win32-x64-msvc@1.1.2':
+    optional: true
+
+  '@cheripia-dev/media-proxy-napi@1.1.2':
+    optionalDependencies:
+      '@cheripia-dev/media-proxy-napi-darwin-arm64': 1.1.2
+      '@cheripia-dev/media-proxy-napi-linux-arm64-gnu': 1.1.2
+      '@cheripia-dev/media-proxy-napi-linux-x64-gnu': 1.1.2
+      '@cheripia-dev/media-proxy-napi-win32-x64-msvc': 1.1.2
+
   '@cropper/element-canvas@2.2.0':
     dependencies:
       '@cropper/element': 2.2.0
@@ -13433,25 +13453,6 @@ snapshots:
 
   '@xmldom/xmldom@0.9.10':
     optional: true
-
-  '@yojo-art/media-proxy-napi-darwin-arm64@1.1.1':
-    optional: true
-
-  '@yojo-art/media-proxy-napi-linux-arm64-gnu@1.1.1':
-    optional: true
-
-  '@yojo-art/media-proxy-napi-linux-x64-gnu@1.1.1':
-    optional: true
-
-  '@yojo-art/media-proxy-napi-win32-x64-msvc@1.1.1':
-    optional: true
-
-  '@yojo-art/media-proxy-napi@1.1.1':
-    optionalDependencies:
-      '@yojo-art/media-proxy-napi-darwin-arm64': 1.1.1
-      '@yojo-art/media-proxy-napi-linux-arm64-gnu': 1.1.1
-      '@yojo-art/media-proxy-napi-linux-x64-gnu': 1.1.1
-      '@yojo-art/media-proxy-napi-win32-x64-msvc': 1.1.1
 
   '@zip.js/zip.js@2.8.60': {}
 

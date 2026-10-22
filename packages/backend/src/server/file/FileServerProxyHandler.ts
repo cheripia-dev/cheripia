@@ -4,7 +4,6 @@
  */
 
 import * as fs from 'node:fs';
-import type { ProcessOptions } from '@yojo-art/media-proxy-napi';
 import type { Config } from '@/config.js';
 import { FILE_TYPE_BROWSERSAFE } from '@/const.js';
 import { StatusError } from '@/misc/status-error.js';
@@ -13,6 +12,7 @@ import { correctFilename } from '@/misc/correct-filename.js';
 import type { IImageStreamable } from '@/core/ImageProcessingService.js';
 import { ImageProcessingService } from '@/core/ImageProcessingService.js';
 import { createRangeStream, attachStreamCleanup, needsCleanup } from './FileServerUtils.js';
+import type { ProcessOptions } from '@cheripia-dev/media-proxy-napi';
 import type { DownloadedFileResult, FileResolveResult, FileServerFileResolver } from './FileServerFileResolver.js';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 

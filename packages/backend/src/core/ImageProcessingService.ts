@@ -4,11 +4,11 @@
  */
 
 import * as fs from 'node:fs';
-import type { Readable } from 'node:stream';
 import { Injectable, type OnModuleInit } from '@nestjs/common';
-import { MediaProcessor } from '@yojo-art/media-proxy-napi';
-import type { MediaProcessorOptions, ProcessOptions } from '@yojo-art/media-proxy-napi';
+import { MediaProcessor } from '@cheripia-dev/media-proxy-napi';
 import { bindThis } from '@/decorators.js';
+import type { MediaProcessorOptions, ProcessOptions } from '@cheripia-dev/media-proxy-napi';
+import type { Readable } from 'node:stream';
 
 export type IImage = {
 	data: Buffer;
