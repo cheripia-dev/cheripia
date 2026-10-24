@@ -506,7 +506,7 @@ export class DriveService {
 			);
 		} catch (_) {
 			satisfyWebpublic = false; //sharpBmpが対応しない形式はおそらくWebpublicに適さない
-			isAnimated = true;//謎なので暫定アニメーションしているという事にしておく
+			isAnimated = true;//アニメーションしているかわからないので暫定値
 		}
 
 		// #region webpublic
