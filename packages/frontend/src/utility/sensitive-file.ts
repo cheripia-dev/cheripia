@@ -29,9 +29,9 @@ export function shouldHideFileByDefault(file: Misskey.entities.DriveFile, ignore
 export async function canRevealFile(file: Misskey.entities.DriveFile, opts?:{ isDoubleClick?: boolean, ev?: PointerEvent }): Promise<boolean> {
 	if (!file.isSensitive) return true;
 	// Misskey: センシティブなメディアをクリックしたとき呼ばれる
-	// yojo-art: optsはすべてyojo-art側の拡張
+	// cheripia: optsはすべてcheripia側の拡張
 	if (!wasConfirmR18()) {
-		// yojo-art: 初めてセンシティブなメディアを開くとき年齢確認ダイアログを表示する
+		// cheripia: 初めてセンシティブなメディアを開くとき年齢確認ダイアログを表示する
 		return await confirmR18();
 	} else if (prefer.s.confirmWhenRevealingSensitiveMedia) {
 		// Misskey: センシティブなメディアを開くときに確認する

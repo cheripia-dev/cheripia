@@ -171,7 +171,7 @@ describe('User', () => {
 			});
 
 			test.skip('Pinning localOnly Note is not delivered', async () => {
-				// yojo-art では localOnly は常に false に固定されているため、
+				// cheripia では localOnly は常に false に固定されているため、
 				// このテストで想定する「ローカルのみでピン留めが配送されない」挙動は存在しない
 				const note = (await alice.client.request('notes/create', { text: 'a', localOnly: true })).createdNote;
 				await alice.client.request('i/pin', { noteId: note.id });

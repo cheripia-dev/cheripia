@@ -165,7 +165,7 @@ class DeliverManager {
 			channelUserIds.push(channel.to);
 		}
 		if (channelUserIds.length > 0) {
-			// yojo-art: チャンネル連合 複数のチャンネルに同時に投稿する操作は非対応
+			// cheripia: チャンネル連合 複数のチャンネルに同時に投稿する操作は非対応
 			const channelActor = await this.cacheService.findUserById(channelUserIds[0]);
 			if (channelActor.host) {
 				//リモートのチャンネル宛にローカルユーザーが投稿

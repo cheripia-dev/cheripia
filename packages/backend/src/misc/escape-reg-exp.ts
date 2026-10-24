@@ -10,7 +10,7 @@ function escapeRegExp(x: string): string {
 /**
  * Remove only the mention addressed to the channel actor from the note text.
  */
-// yojo-art: 部分一致で無関係な文字列を壊さないよう、メンションの境界を厳密に判定して除去する
+// cheripia: 部分一致で無関係な文字列を壊さないよう、メンションの境界を厳密に判定して除去する
 export function removeChannelMention(text: string, username: string, host: string | null): string {
 	const u = escapeRegExp(username);
 	if (host) {

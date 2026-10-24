@@ -101,7 +101,7 @@ export class NoteUpdateService implements OnApplicationShutdown {
 		if (data.text) {
 			note.channel ??= note.channelId ? await this.channelsRepository.findOneBy({ id: note.channelId }) : null;
 			if (note.channel) {
-			// yojo-art: チャンネル投稿のチャンネルへのメンションは表示しない
+			// cheripia: チャンネル投稿のチャンネルへのメンションは表示しない
 				note.channel.actor ??= note.channel.actorId ? await this.cacheService.findUserById(note.channel.actorId) : null;
 				const username = note.channel.actor?.username;
 				if (username) {

@@ -499,7 +499,7 @@ export class ApInboxService {
 					//リモートユーザーによるローカルのチャンネルへの投稿
 					const user = { id: channel.actor.id, host: null };
 					if (activity.signature) {
-						//yojo-art: チャンネル連合 内容に署名されていれば転送する
+						//cheripia: チャンネル連合 内容に署名されていれば転送する
 						const dm = this.apDeliverManagerService.createDeliverManager(user, activity);
 						dm.addChannelFollowersRecipe(user.id);
 						trackPromise(dm.execute());

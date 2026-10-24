@@ -34,7 +34,7 @@ export default [
 				_ENV_: false,
 				_PERF_PREFIX_: false,
 
-				// yojo-art
+				// cheripia
 				_BASEDCHERRYPICKVERSION_: false,
 			},
 			parser,

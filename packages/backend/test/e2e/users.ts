@@ -310,7 +310,7 @@ describe('ユーザー', () => {
 		// signupの時はtokenが含まれる特別なMeDetailedが返ってくる
 		assert.match(response.token, /[a-zA-Z0-9]{16}/);
 
-		//yojo-art 普通に作ったアカウントはチャンネルアカウントにならない
+		//cheripia 普通に作ったアカウントはチャンネルアカウントにならない
 		assert.strictEqual(response.channelId, undefined);
 		// UserLite
 		assert.match(response.id, /[0-9a-z]{10}/);

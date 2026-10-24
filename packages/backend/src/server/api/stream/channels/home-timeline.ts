@@ -53,7 +53,7 @@ export class HomeTimelineChannel extends Channel {
 				return;
 			}
 			if (note.user.channelId != null) {
-				// yojo-art: チャンネルアカウントによる純粋なリノートの場合
+				// cheripia: チャンネルアカウントによる純粋なリノートの場合
 				if ( isRenotePacked(note) && !isQuotePacked(note) && note.renote) {
 					return;
 				}
