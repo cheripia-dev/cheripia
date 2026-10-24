@@ -10,6 +10,7 @@ import { ModuleRef } from '@nestjs/core';
 import { sharpBmp } from '@misskey-dev/sharp-read-bmp';
 import { In, IsNull, Not } from 'typeorm';
 import { DeleteObjectCommandInput, PutObjectCommandInput, CopyObjectCommandInput } from '@aws-sdk/client-s3';
+import { Metadata as SharpMetadata } from 'sharp';
 import { DI } from '@/di-symbols.js';
 import type { DriveFilesRepository, UsersRepository, DriveFoldersRepository, UserProfilesRepository, MiMeta } from '@/models/_.js';
 import type { Config } from '@/config.js';
@@ -476,28 +477,6 @@ export class DriveService {
 			};
 		}
 
-		let satisfyWebpublic: boolean;
-		let isAnimated: boolean;
-		try {
-			const img = await sharpBmp(path, type);
-			const metadata = await img.metadata();
-			isAnimated = !!(metadata.pages && metadata.pages > 1);
-
-			satisfyWebpublic = !!(
-				type !== 'image/svg+xml' && // security reason
-				type !== 'image/avif' && // not supported by Mastodon and MS Edge
-			!(metadata.exif ?? metadata.iptc ?? metadata.xmp ?? metadata.tifftagPhotoshop) &&
-			metadata.width && metadata.width <= 2048 &&
-			metadata.height && metadata.height <= 2048
-			);
-		} catch (err) {
-			this.registerLogger.warn(`sharp failed: ${err}`);
-			return {
-				webpublic: null,
-				thumbnail: null,
-			};
-		}
-
 		let src: Buffer;
 		try {
 			src = await fs.promises.readFile(path);
@@ -507,6 +486,27 @@ export class DriveService {
 				webpublic: null,
 				thumbnail: null,
 			};
+		}
+
+		let satisfyWebpublic: boolean;
+		let isAnimated: boolean;
+		let metadata = null as SharpMetadata | null;
+		try {
+			//FIXME: メタデータ取得試行->napiで画像変換->変換後のメタデータ取得で最大3回の画像デコードが発生する
+			const img = await sharpBmp(path, type);
+			metadata = await img.metadata();
+			isAnimated = !!(metadata.pages && metadata.pages > 1);
+
+			satisfyWebpublic = !!(
+				type !== 'image/svg+xml' && // security reason
+				type !== 'image/avif' && // not supported by Mastodon and MS Edge
+			!(metadata.exif ?? metadata.iptc ?? metadata.xmp ?? metadata.tifftagPhotoshop) &&
+			metadata.width && metadata.width <= 2048 &&
+			metadata.height && metadata.height <= 2048
+			);
+		} catch (_) {
+			satisfyWebpublic = false; //sharpBmpが対応しない形式はおそらくWebpublicに適さない
+			isAnimated = true;//謎なので暫定アニメーションしているという事にしておく
 		}
 
 		// #region webpublic
@@ -525,6 +525,12 @@ export class DriveService {
 				webpublic = noResize
 					? await this.imageProcessingService.processWithoutResize(src, { lossless })
 					: await this.imageProcessingService.process(src, { lossless });
+				if (metadata === null) {
+					//metadataが直接取得できない形式ならwebp変換後のwebpublicをベースにアニメーション有無を取得する
+					const img = await sharpBmp(webpublic.data, type);
+					metadata = await img.metadata();
+					isAnimated = !!(metadata.pages && metadata.pages > 1);
+				}
 			} catch (err) {
 				this.registerLogger.warn('web image not created (an error occurred)', err as Error);
 			}
