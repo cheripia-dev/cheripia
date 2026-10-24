@@ -31,12 +31,12 @@ import { computed, onMounted, ref, watch } from 'vue';
 import * as Misskey from 'misskey-js';
 import { host } from '@@/js/config.js';
 import { sum } from '@@/js/array.js';
+import { useLowresTime } from '@@/js/use-lowres-time.js';
 import type { OpenOnRemoteOptions } from '@/utility/please-login.js';
 import { pleaseLogin } from '@/utility/please-login.js';
 import * as os from '@/os.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { i18n } from '@/i18n.js';
-import { useLowresTime } from '@/composables/use-lowres-time.js';
 import { miLocalStorage } from '@/local-storage.js';
 
 const props = defineProps<{

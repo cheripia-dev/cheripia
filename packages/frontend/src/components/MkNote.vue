@@ -217,7 +217,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 						:enableEmojiMenu="!!$i"
 						:enableEmojiMenuReaction="!!$i"
 						class="_selectable"
-						:enableAnimatedMfm="enableAnimatedMfm"
+						:enableAnimatedMfm="$i ? undefined : enableAnimatedMfm"
 					/>
 					<div v-if="prefer.s.showTranslateButtonInNote && $i && (!prefer.s.useAutoTranslate || (!$i.policies.canUseAutoTranslate || (prefer.s.useAutoTranslate && (isLong || appearNote.cw != null || !showContent)))) && instance.translatorAvailable && $i.policies.canUseTranslator && (appearNote.text || appearNote.poll) && isForeignLanguage" style="padding: 5px 0; color: var(--MI_THEME-accent);">
 						<button v-if="translateStatus === 'none'" ref="translateButton" class="_button" @click.stop="translate(false)">{{ i18n.ts.translateNote }}</button>
@@ -408,14 +408,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, inject, ref, useTemplateRef, provide } from 'vue';
 import * as Misskey from 'misskey-js';
 import { concat } from '@@/js/array.js';
+import { userPage } from '@@/js/user.js';
 import type { Ref } from 'vue';
 import type { Keymap } from '@/utility/hotkey.js';
 import { useNote } from '@/composables/use-note.js';
 import { prefer } from '@/preferences.js';
 import { i18n } from '@/i18n.js';
 import { $i } from '@/i.js';
-import { userPage } from '@/filters/user.js';
-import { notePage } from '@/filters/note.js';
+import { notePage } from '@@/js/note.js';
 import number from '@/filters/number.js';
 import { getNoteSummary } from '@/utility/get-note-summary.js';
 import { isEnabledUrlPreview } from '@/utility/url-preview.js';

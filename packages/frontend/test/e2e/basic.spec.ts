@@ -170,12 +170,22 @@ test.describe('After user signed in', () => {
 		// 表示に時間がかかるのでデフォルト秒数だとタイムアウトする
 		await page.getByTestId('user-setup-continue').click({ timeout: 30000 });
 
+		// プロフィール設定
 		await locateMkInput(page, 'user-setup-user-name').fill('ありす');
 		await locateMkTextarea(page, 'user-setup-user-description').fill('ほげ');
 		// TODO: アイコン設定のテスト
 		await page.getByTestId('user-setup-continue').click();
 
 		// プライバシー設定
+		await page.getByTestId('user-setup-continue').click();
+
+		// 文字サイズ設定
+		await page.getByTestId('user-setup-continue').click();
+
+		// ぼかし効果設定
+		await page.getByTestId('user-setup-continue').click();
+
+		// MFM・アニメーション画像設定
 		await page.getByTestId('user-setup-continue').click();
 
 		// フォロー設定

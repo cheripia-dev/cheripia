@@ -14,14 +14,14 @@ Unicode range 1D49C to 1D4B5.
 
 @font-face {
 	font-family: 'Temml';
-	src: url('assets/Temml.woff2') format('woff2');
+	src: url('/client-assets/Temml.woff2') format('woff2');
 	font-weight: normal;
 	font-style: normal;
 }
 
 @font-face {
 	font-family: Latin Modern Math;
-	src: url('assets/latinmodernmath.woff2');
+	src: url('/client-assets/latinmodernmath.woff2');
 }
 
 math {
