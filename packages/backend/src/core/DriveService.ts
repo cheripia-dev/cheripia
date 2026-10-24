@@ -489,7 +489,7 @@ export class DriveService {
 		}
 
 		let satisfyWebpublic: boolean;
-		let isAnimated: boolean;
+		let isAnimated: boolean | undefined;
 		let metadata = null as SharpMetadata | null;
 		try {
 			//FIXME: メタデータ取得試行->napiで画像変換->変換後のメタデータ取得で最大3回の画像デコードが発生する
@@ -506,7 +506,6 @@ export class DriveService {
 			);
 		} catch (_) {
 			satisfyWebpublic = false; //sharpBmpが対応しない形式はおそらくWebpublicに適さない
-			isAnimated = true;//アニメーションしているかわからないので暫定値
 		}
 
 		// #region webpublic
@@ -523,13 +522,14 @@ export class DriveService {
 				const noResize = compressMode?.value === 'noResizeCompress' || compressMode?.value === 'noResizeCompressLossy';
 				const lossless = LOSSLESS_WEBPUBLIC_MIME_TYPES.has(type);
 				webpublic = noResize
-					? await this.imageProcessingService.processWithoutResize(src, { lossless })
-					: await this.imageProcessingService.process(src, { lossless });
+					? await this.imageProcessingService.processWithoutResize(src, { lossless, contentType: type })
+					: await this.imageProcessingService.process(src, { lossless, contentType: type });
 				if (metadata === null) {
 					//metadataが直接取得できない形式ならwebp変換後のwebpublicをベースにアニメーション有無を取得する
 					const img = await sharpBmp(webpublic.data, type);
 					metadata = await img.metadata();
 					isAnimated = !!(metadata.pages && metadata.pages > 1);
+					webpublic = null;
 				}
 			} catch (err) {
 				this.registerLogger.warn('web image not created (an error occurred)', err as Error);
@@ -546,8 +546,8 @@ export class DriveService {
 
 		try {
 			thumbnail = isAnimated
-				? await this.imageProcessingService.process(src, { width: 374, height: 317, webpQuality: 80 })
-				: await this.imageProcessingService.process(src, { static: true, width: 498, height: 422 });
+				? await this.imageProcessingService.process(src, { width: 374, height: 317, webpQuality: 80, contentType: type })
+				: await this.imageProcessingService.process(src, { static: true, width: 498, height: 422, contentType: type });
 		} catch (err) {
 			this.registerLogger.warn('thumbnail not created (an error occurred)', err as Error);
 		}
