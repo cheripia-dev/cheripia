@@ -529,7 +529,6 @@ export class DriveService {
 					const img = await sharpBmp(webpublic.data, type);
 					metadata = await img.metadata();
 					isAnimated = !!(metadata.pages && metadata.pages > 1);
-					webpublic = null;
 				}
 			} catch (err) {
 				this.registerLogger.warn('web image not created (an error occurred)', err as Error);
