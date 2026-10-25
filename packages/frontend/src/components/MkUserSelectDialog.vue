@@ -16,22 +16,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<template #header>{{ i18n.ts.selectUser }}</template>
 	<div>
 		<div :class="$style.form">
-			<MkInput v-if="computedLocalOnly" v-model="username" :autofocus="true" @update:modelValue="search">
+			<MkInput v-model="acct" :autofocus="true" @update:modelValue="search">
 				<template #label>{{ i18n.ts.username }}</template>
 				<template #prefix>@</template>
 			</MkInput>
-			<FormSplit v-else :minWidth="170">
-				<MkInput v-model="username" :autofocus="true" @update:modelValue="search">
-					<template #label>{{ i18n.ts.username }}</template>
-					<template #prefix>@</template>
-				</MkInput>
-				<MkInput v-model="host" :datalist="[hostname]" @update:modelValue="search">
-					<template #label>{{ i18n.ts.host }}</template>
-					<template #prefix>@</template>
-				</MkInput>
-			</FormSplit>
 		</div>
-		<div v-if="username != '' || host != ''" :class="[$style.result, { [$style.hit]: users.length > 0 }]">
+		<div v-if="acct != ''" :class="[$style.result, { [$style.hit]: users.length > 0 }]">
 			<div v-if="users.length > 0" :class="$style.users">
 				<div v-for="user in users" :key="user.id" class="_button" :class="[$style.user, { [$style.selected]: selected && selected.id === user.id }]" @click="selected = user" @dblclick="ok()">
 					<MkAvatar :user="user" :class="$style.avatar" indicator/>
@@ -45,7 +35,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<span>{{ i18n.ts.noUsers }}</span>
 			</div>
 		</div>
-		<div v-if="username == '' && host == ''" :class="$style.recent">
+		<div v-if="acct == ''" :class="$style.recent">
 			<div :class="$style.users">
 				<div v-for="user in recentUsers" :key="user.id" class="_button" :class="[$style.user, { [$style.selected]: selected && selected.id === user.id }]" @click="selected = user" @dblclick="ok()">
 					<MkAvatar :user="user" :class="$style.avatar" indicator/>
@@ -63,9 +53,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script lang="ts" setup>
 import { onMounted, ref, computed, useTemplateRef } from 'vue';
 import * as Misskey from 'misskey-js';
-import { host as currentHost, hostname } from '@@/js/config.js';
+import { host as currentHost } from '@@/js/config.js';
 import MkInput from '@/components/MkInput.vue';
-import FormSplit from '@/components/form/split.vue';
 import MkModalWindow from '@/components/MkModalWindow.vue';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { store } from '@/store.js';
@@ -89,21 +78,30 @@ const props = withDefaults(defineProps<{
 
 const computedLocalOnly = computed(() => props.localOnly || instance.federation === 'none');
 
-const username = ref('');
-const host = ref('');
+const acct = ref('');
 const users = ref<Misskey.entities.UserLite[]>([]);
 const recentUsers = ref<Misskey.entities.UserDetailed[]>([]);
 const selected = ref<Misskey.entities.UserLite | null>(null);
 const dialogEl = useTemplateRef('dialogEl');
 
+function parseAcct(): { username: string; host: string } {
+	const trimmed = acct.value.replace(/^@/, '');
+	const [u, h] = trimmed.split('@', 2);
+	return {
+		username: u,
+		host: h || '',
+	};
+}
+
 function search() {
-	if (username.value === '' && host.value === '') {
+	if (acct.value === '') {
 		users.value = [];
 		return;
 	}
+	const { username, host } = parseAcct();
 	misskeyApi('users/search-by-username-and-host', {
-		username: username.value,
-		host: computedLocalOnly.value ? '.' : host.value,
+		username: username,
+		host: computedLocalOnly.value ? '.' : host,
 		limit: 10,
 		detail: false,
 	}).then(_users => {
