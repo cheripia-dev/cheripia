@@ -53,7 +53,7 @@ export class ChannelChannel extends Channel {
 		if (!this.isNoteVisibleForMe(note)) return;
 		if (this.isNoteMutedOrBlocked(note)) return;
 
-		if (note.user.channelId != null) return;//yojo-art: チャンネルアカウントによる投稿はTLに流さない
+		if (note.user.channelId != null) return;//cheripia: チャンネルアカウントによる投稿はTLに流さない
 
 		const filtered = await this.noteStreamingHidingService.filter(note, this.user?.id ?? null);
 		if (!filtered) return;

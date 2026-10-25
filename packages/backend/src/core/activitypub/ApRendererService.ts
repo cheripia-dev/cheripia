@@ -159,7 +159,7 @@ export class ApRendererService {
 		} else {
 			throw new Error('renderAnnounce: cannot render non-public note');
 		}
-		//yojo-art: チャンネル連合 チャンネル投稿は宛先にチャンネルアカウントのフォロワーを含める
+		//cheripia: チャンネル連合 チャンネル投稿は宛先にチャンネルアカウントのフォロワーを含める
 		const channelFollowersUri = (note.channelId && note.userId) ? await this.getChannelFollowersUri(note as MiNote & { channelId: string }) : null;
 		if (channelFollowersUri && !to.includes(channelFollowersUri) && !cc.includes(channelFollowersUri)) {
 			cc.push(channelFollowersUri);
@@ -219,7 +219,7 @@ export class ApRendererService {
 		if (object.to) activity.to = object.to;
 		if (object.cc) activity.cc = object.cc;
 		if (Array.isArray(activity.to) && Array.isArray(activity.cc)) {
-			//yojo-art: チャンネル連合 チャンネル投稿は宛先にチャンネルアカウントのフォロワーを含める
+			//cheripia: チャンネル連合 チャンネル投稿は宛先にチャンネルアカウントのフォロワーを含める
 			if (channelFollowersUri && !activity.to.includes(channelFollowersUri) && !activity.cc.includes(channelFollowersUri)) {
 				activity.cc.push(channelFollowersUri);
 			}
@@ -536,7 +536,7 @@ export class ApRendererService {
 		} else {
 			to = mentions;
 		}
-		//yojo-art: チャンネル連合 チャンネル投稿は宛先にチャンネルアカウントのフォロワーを含める
+		//cheripia: チャンネル連合 チャンネル投稿は宛先にチャンネルアカウントのフォロワーを含める
 		const channelFollowersUri = (note.channelId && note.userId) ? await this.getChannelFollowersUri(note as MiNote & { channelId: string }) : null;
 		if (channelFollowersUri && !to.includes(channelFollowersUri) && !cc.includes(channelFollowersUri)) {
 			cc.push(channelFollowersUri);
@@ -611,7 +611,7 @@ export class ApRendererService {
 
 		const summary = note.cw === '' ? String.fromCharCode(0x200B) : note.cw;
 
-		// yojo-art: note本体は書き換えず、描画に必要なフィールドだけ差し替えたビューを渡す
+		// cheripia: note本体は書き換えず、描画に必要なフィールドだけ差し替えたビューを渡す
 		const { content, noMisskeyContent } = this.apMfmService.getNoteHtml(
 			{ text, mentionedRemoteUsers: mentionedRemoteUsersJson },
 			extraHtml,

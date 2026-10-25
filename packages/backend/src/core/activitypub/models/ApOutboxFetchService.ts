@@ -168,7 +168,7 @@ export class ApOutboxFetchService implements OnModuleInit {
 						}
 						let channel = null as MiChannel | null;
 						if (user.channelId) {
-							//yojo-art: チャンネルアカウントによる投稿はすべてチャンネル投稿
+							//cheripia: チャンネルアカウントによる投稿はすべてチャンネル投稿
 							channel = await this.channelsRepository.findOneBy({ id: user.channelId });
 							if (channel)channel.actor = user;
 						} else {

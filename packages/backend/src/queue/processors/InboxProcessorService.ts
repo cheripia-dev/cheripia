@@ -140,7 +140,7 @@ export class InboxProcessorService implements OnApplicationShutdown {
 			// 一致しなくても、でもLD-Signatureがありそうならそっちも見る
 			({ authUser, activity } = await this.verifyJsonLd(authUser, activity, signature));
 		} else {
-			// yojo-art: HTTP-Signatureの検証を通過したため、JsonLD検証が必須ではないが、転送が必要か判定する
+			// cheripia: HTTP-Signatureの検証を通過したため、JsonLD検証が必須ではないが、転送が必要か判定する
 			const audienceIds = [...getApIds(activity.to), ...getApIds(activity.cc), ...getApIds(activity.audience)];
 			if (this.utilityService.includesSelfHost(audienceIds)) {
 				// ローカルのユーザーが対象に指定されていそうなら、転送のため JSON-LD 署名を検証する
@@ -216,7 +216,7 @@ export class InboxProcessorService implements OnApplicationShutdown {
 		return 'ok';
 	}
 
-	// yojo-art: JsonLd の署名検証を別関数に切り出した
+	// cheripia: JsonLd の署名検証を別関数に切り出した
 	@bindThis
 	private async verifyJsonLd(
 		_authUser: {

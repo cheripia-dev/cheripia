@@ -59,7 +59,7 @@ export class HybridTimelineChannel extends Channel {
 	private async onNote(note: Packed<'Note'>) {
 		if (note.user.channelId != null) {
 			if (isRenotePacked(note) && !isQuotePacked(note) && note.renote) {
-				// yojo-art: チャンネルアカウントによる純粋なリノートの場合
+				// cheripia: チャンネルアカウントによる純粋なリノートの場合
 				return;
 			}
 		}

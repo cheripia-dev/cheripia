@@ -525,7 +525,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 		}
 
 		if (data.text && data.channel) {
-			// yojo-art: チャンネル投稿のチャンネルへのメンションは表示しない
+			// cheripia: チャンネル投稿のチャンネルへのメンションは表示しない
 			data.channel.actor ??= data.channel.actorId ? await this.cacheService.findUserById(data.channel.actorId) : null;
 			const username = data.channel.actor?.username;
 			if (username) {
@@ -983,7 +983,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 					}
 
 					if (note.channel != null && user.channelId === null && note.channel.actorId) {
-						// yojo-art: チャンネルのフォロワーに配送
+						// cheripia: チャンネルのフォロワーに配送
 						if (isPureRenote) {
 							//チャンネル内リノート
 							dm.addChannelFollowersRecipe(note.channel.actorId);
@@ -1039,7 +1039,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 			//#endregion
 		}
 
-		// yojo-art: チャンネルアカウントの自動リノートは除外する
+		// cheripia: チャンネルアカウントの自動リノートは除外する
 		if (data.channel && !user.channelId) {
 			this.channelsRepository.increment({ id: data.channel.id }, 'notesCount', 1);
 			this.channelsRepository.update(data.channel.id, {

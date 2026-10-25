@@ -273,7 +273,7 @@ export class CustomEmojiService implements OnApplicationShutdown {
 		originalUrl: string;
 		name?: string;
 	}): Promise<MiDriveFile> {
-		// yojo-art: 絵文字再アップロード 元ファイルを削除するべきか要検討
+		// cheripia: 絵文字再アップロード 元ファイルを削除するべきか要検討
 		const copyDriveFile = await this.driveService.reuploadFile(data);
 		const originalSourceUrl = data.originalUrl;
 		const originalDriveFile = await this.driveFilesRepository.findOneBy({ url: originalSourceUrl });

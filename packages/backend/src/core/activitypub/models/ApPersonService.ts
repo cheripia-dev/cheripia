@@ -1044,8 +1044,8 @@ export class ApPersonService implements OnModuleInit {
 		const featuredNotes = await Promise.all(items
 			//.filter(item => item != null)
 			//item.objectの内容は信頼できないが、UserにはisPostしか許可されないのにUserが変なの付けてたら拒否
-			.filter(item => isPost(item.object))// yojo-art: Note限定からisPostに判定を変更。
-			.slice(0, rolePolicies.pinLimit)// yojo-art: ピン留め上限をロール基準に
+			.filter(item => isPost(item.object))// cheripia: Note限定からisPostに判定を変更。
+			.slice(0, rolePolicies.pinLimit)// cheripia: ピン留め上限をロール基準に
 			.map(item => limit(async () => {
 				//item.objectは信頼できる取得不要な場合とそうでない場合がある
 				//item.sentFromのホストを見て判断
