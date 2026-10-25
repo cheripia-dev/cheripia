@@ -52,10 +52,33 @@ export const meta = {
 			id: 'e86c14a4-0da2-4032-8df3-e737a04c7f3b',
 		},
 
+		bannerNotAnImage: {
+			message: 'The banner file is not an image.',
+			code: 'BANNER_NOT_AN_IMAGE',
+			id: '4363e8b5-3fcc-466a-9a02-9fe44e663a17',
+			httpStatusCode: 400,
+		},
+
+		bannerReuploadFailed: {
+			message: 'Failed to set the banner image.',
+			code: 'BANNER_REUPLOAD_FAILED',
+			id: '35866beb-43d6-463a-ac72-6b2add39c376',
+			kind: 'server',
+			httpStatusCode: 500,
+		},
+
 		iconNotAnImage: {
 			message: 'The icon file is not an image.',
 			code: 'ICON_NOT_AN_IMAGE',
 			id: 'a1d4e7b2-8c35-4f9a-b6e1-2d7f9c0a5e84',
+		},
+
+		iconReuploadFailed: {
+			message: 'Failed to set the icon image.',
+			code: 'ICON_REUPLOAD_FAILED',
+			id: '3928a868-723e-4482-894d-fdfd8025a5b6',
+			kind: 'server',
+			httpStatusCode: 500,
 		},
 	},
 } as const;
@@ -135,7 +158,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					throw new ApiError(meta.errors.noSuchFile);
 				}
 				if (!banner.type.startsWith('image/')) {
-					banner = undefined;//画像以外が指定された時は変更なし
+					throw new ApiError(meta.errors.bannerNotAnImage);
 				}
 			} else if (ps.bannerId === null) {
 				banner = null;
@@ -159,6 +182,48 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			const createdCopyIds: string[] = [];
 			try {
 				if (channel.actorId) {
+					// 複製失敗時に説明文・ピン留めの変更が残らないよう、先に画像を準備する
+					if (banner != null) {
+						const originalBanner = banner;
+						const reuploadedBanner = await this.channelEntityService.reuploadFileAsChannelAccount(originalBanner, channel.actorId);
+						if (reuploadedBanner == null) {
+							throw new ApiError(meta.errors.bannerReuploadFailed);
+						}
+						// 実際に新規作成された複製ファイルのみ、DB反映失敗時の後始末対象とする
+						if (reuploadedBanner.id !== originalBanner.id) {
+							createdCopyIds.push(reuploadedBanner.id);
+						}
+						banner = reuploadedBanner;
+					}
+					if (banner) {
+						updates.bannerId = banner.id;
+						updates.bannerUrl = this.driveFileEntityService.getPublicUrl({ file: banner, allowProxiedUrl: false });
+						updates.bannerBlurhash = banner.blurhash;
+					} else if (ps.bannerId === null) {
+						updates.bannerId = null;
+						updates.bannerUrl = null;
+						updates.bannerBlurhash = null;
+					}
+					if (icon != null) {
+						const originalIcon = icon;
+						const reuploadedIcon = await this.channelEntityService.reuploadFileAsChannelAccount(originalIcon, channel.actorId);
+						if (reuploadedIcon == null) {
+							throw new ApiError(meta.errors.iconReuploadFailed);
+						}
+						if (reuploadedIcon.id !== originalIcon.id) {
+							createdCopyIds.push(reuploadedIcon.id);
+						}
+						icon = reuploadedIcon;
+					}
+					if (icon) {
+						updates.avatarId = icon.id;
+						updates.avatarUrl = this.driveFileEntityService.getPublicUrl({ file: icon, allowProxiedUrl: false });
+						updates.avatarBlurhash = icon.blurhash;
+					} else if (ps.iconId === null) {
+						updates.avatarId = null;
+						updates.avatarUrl = null;
+						updates.avatarBlurhash = null;
+					}
 					if (ps.description !== undefined) {
 						await this.userProfilesRepository.update({ userId: channel.actorId }, {
 							description: ps.description,
@@ -183,43 +248,6 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 							console.log('add pin note ' + pin);
 							await this.notePiningService.addPinned({ id: channel.actorId, host: channel.host }, pin, channel);
 						}
-					}
-					if (banner != null) {
-						const originalBanner = banner;
-						const reuploadedBanner = await this.channelEntityService.reuploadFileAsChannelAccount(originalBanner, channel.actorId);
-						// 実際に新規作成された複製ファイルのみ、DB反映失敗時の後始末対象とする
-						if (reuploadedBanner != null && reuploadedBanner.id !== originalBanner.id) {
-							createdCopyIds.push(reuploadedBanner.id);
-						}
-						// 複製失敗時は「変更なし」扱い
-						banner = reuploadedBanner ?? undefined;
-					}
-					if (banner) {
-						updates.bannerId = banner.id;
-						updates.bannerUrl = this.driveFileEntityService.getPublicUrl({ file: banner, allowProxiedUrl: false });
-						updates.bannerBlurhash = banner.blurhash;
-					} else if (ps.bannerId === null) {
-						updates.bannerId = null;
-						updates.bannerUrl = null;
-						updates.bannerBlurhash = null;
-					}
-					if (icon != null) {
-						const originalIcon = icon;
-						const reuploadedIcon = await this.channelEntityService.reuploadFileAsChannelAccount(originalIcon, channel.actorId);
-						if (reuploadedIcon != null && reuploadedIcon.id !== originalIcon.id) {
-							createdCopyIds.push(reuploadedIcon.id);
-						}
-						// 複製失敗時は「変更なし」扱い
-						icon = reuploadedIcon ?? undefined;
-					}
-					if (icon) {
-						updates.avatarId = icon.id;
-						updates.avatarUrl = this.driveFileEntityService.getPublicUrl({ file: icon, allowProxiedUrl: false });
-						updates.avatarBlurhash = icon.blurhash;
-					} else if (ps.iconId === null) {
-						updates.avatarId = null;
-						updates.avatarUrl = null;
-						updates.avatarBlurhash = null;
 					}
 					if (ps.name !== undefined || ps.description !== undefined) {
 						const user = await this.usersRepository.findOneBy({ id: channel.actorId });
