@@ -13,6 +13,7 @@ if (import.meta.env.DEV) {
 }
 
 import '@/style.scss';
+import '@@/Temml-Latin-Modern.css';
 import { createApp, defineAsyncComponent } from 'vue';
 import defaultLightTheme from '@@/themes/l-light.json5';
 import defaultDarkTheme from '@@/themes/d-dark.json5';

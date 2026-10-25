@@ -23,6 +23,8 @@ allowBuilds:
   canvas: true
   core-js: true
   esbuild: true
+  # Git dependency needs prepare to generate built/; trust only this pinned revision.
+  mfm-js@https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d6f9e13f93efd2db355c9374efe0a8e66ec7616d: true
   msgpackr-extract: true
   msw: true
   nice-napi: true
@@ -42,7 +44,6 @@ minimumReleaseAgeExclude:
   - '@syuilo/aiscript'
   - '@cheripia-dev/media-proxy-napi*'
   - buraha
-  - mfm-js
   - slacc
   - slacc-android-arm-eabi
   - slacc-android-arm64
@@ -57,12 +58,6 @@ minimumReleaseAgeExclude:
   - slacc-linux-x64-musl
   - slacc-win32-arm64-msvc
   - slacc-win32-x64-msvc
-  - '@typescript/native-preview*'
-  - undici@6.28.1 || 7.29.1 # そのうち消す
-  # Renovate security update: nodemailer@9.1.1
-  - nodemailer@9.1.1
-  # Renovate security update: fastify@5.12.5
-  - fastify@5.12.5
 overrides:
   '@aiscript-dev/aiscript-languageserver': '-'
   chokidar: 5.0.0

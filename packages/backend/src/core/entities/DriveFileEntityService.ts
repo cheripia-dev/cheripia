@@ -29,6 +29,18 @@ type PackOptions = {
 	withUser?: boolean,
 };
 
+type GetPublicUrlOptions = {
+	file: MiDriveFile;
+	/** アバター用のプロキシURLにする */
+	mode?: 'avatar';
+	allowProxiedUrl?: true;
+} | {
+	file: MiDriveFile;
+	/** AP で配信するURLにする (apFileBaseUrl を適用する) */
+	ap?: boolean;
+	allowProxiedUrl: false;
+};
+
 @Injectable()
 export class DriveFileEntityService {
 	constructor(
@@ -78,7 +90,7 @@ export class DriveFileEntityService {
 	}
 
 	@bindThis
-	private getProxiedUrl(url: string, mode?: 'static' | 'avatar'): string {
+	public getProxiedUrl(url: string, mode?: 'static' | 'avatar'): string {
 		return appendQuery(
 			`${this.config.mediaProxy}/${mode ?? 'image'}.webp`,
 			query({
@@ -86,6 +98,16 @@ export class DriveFileEntityService {
 				...(mode ? { [mode]: '1' } : {}),
 			}),
 		);
+	}
+
+	/**
+	 * DBに保存したプロキシを通さないバナー (ユーザー・チャンネル・相互リンク) のURLに、APIで返す際のメディアプロキシのURLを付与する
+	 * 外部メディアプロキシが無効で、リモートのファイルをプロキシしない設定の場合は、ローカル・リモートとも元のURLを返す
+	 */
+	@bindThis
+	public getBannerUrl(url: string): string {
+		if (!this.config.externalMediaProxyEnabled && !this.meta.proxyRemoteFiles) return url;
+		return this.getProxiedUrl(url);
 	}
 
 	@bindThis
@@ -111,8 +133,24 @@ export class DriveFileEntityService {
 		return file.thumbnailUrl ?? (isMimeImage(file.type, 'sharp-convertible-image') ? url : null);
 	}
 
+	/**
+	 * ファイルの公開URLを返す
+	 *
+	 * - allowProxiedUrl: true (既定): APIで返すURL。remoteProxy・メディアプロキシ・期限切れリモートファイルのローカルプロキシを考慮する
+	 * - allowProxiedUrl: false: DBへの保存やAPでの配信に使う、プロキシを通さない元のURL。
+	 *   プロキシURLは pack 時に付与するため、プロキシ関連の分岐 (remoteProxy・メディアプロキシ・ローカルプロキシ) はすべて通らない
+	 */
 	@bindThis
-	public getPublicUrl(file: MiDriveFile, mode?: 'avatar', ap?: boolean): string { // static = thumbnail
+	public getPublicUrl(opts: GetPublicUrlOptions): string {
+		const { file } = opts;
+		const url = file.webpublicUrl ?? file.url;
+
+		if (opts.allowProxiedUrl === false) {
+			return opts.ap ? this.applyApFileBaseUrl(file, url) : url;
+		}
+
+		const mode = opts.mode;
+
 		// PublicUrlにはexternalMediaProxyEnabledでもremoteProxyを使う
 		// https://github.com/yojo-art/cherrypick/issues/84
 		if (file.uri != null && file.userHost != null && mode !== 'avatar' && this.config.remoteProxy != null) {
@@ -135,28 +173,58 @@ export class DriveFileEntityService {
 			const key = file.webpublicAccessKey;
 
 			if (key && !key.match('/')) {	// 古いものはここにオブジェクトストレージキーが入ってるので除外
-				const url = `${this.config.url}/files/${key}`;
 				if (mode === 'avatar') return this.getProxiedUrl(file.uri, 'avatar');
-				return url;
+				return `${this.config.url}/files/${key}`;
 			}
 		}
-
-		const url = file.webpublicUrl ?? file.url;
 
 		if (mode === 'avatar') {
 			return this.getProxiedUrl(url, 'avatar');
 		}
 
-		if (ap && this.config.apFileBaseUrl) {
-			const baseUrl = this.config.apFileBaseUrl;
-			const isValidBaseUrl = /^https?:\/\/[\w.-]+\.[a-zA-Z]{2,}(\/.*)?$/i.test(baseUrl);
-			if (isValidBaseUrl) {
-				const trimmedBaseUrl = baseUrl.replace(/\/$/, '');
-				return url.replace(/^https?:\/\/[\w.-]+\.[a-zA-Z]{2,}/, trimmedBaseUrl);
-			}
-		}
-
 		return url;
+	}
+
+	/**
+	 * AP で配信するファイルURLのオリジンを apFileBaseUrl に置き換える
+	 * apFileBaseUrl はオブジェクトストレージ上のローカルファイル専用のため、内部ストレージのファイルやリモートのファイルには適用しない
+	 */
+	@bindThis
+	private applyApFileBaseUrl(file: MiDriveFile, url: string): string {
+		if (file.storedInternal || file.userHost != null) return url;
+		return this.replaceOriginWithApFileBaseUrl(url);
+	}
+
+	/**
+	 * 保存先の分からないローカルファイルのURL (カスタム絵文字など) に apFileBaseUrl を適用する
+	 * このサーバー自身が配信するURL (内部ストレージ) には適用しない
+	 */
+	@bindThis
+	public applyApFileBaseUrlToLocalFileUrl(url: string): string {
+		try {
+			if (new URL(url).origin === new URL(this.config.url).origin) return url;
+		} catch {
+			return url;
+		}
+		return this.replaceOriginWithApFileBaseUrl(url);
+	}
+
+	@bindThis
+	private replaceOriginWithApFileBaseUrl(url: string): string {
+		if (!this.config.apFileBaseUrl) return url;
+
+		let baseUrl: URL;
+		let fileUrl: URL;
+		try {
+			baseUrl = new URL(this.config.apFileBaseUrl);
+			fileUrl = new URL(url);
+		} catch {
+			return url;
+		}
+		if (baseUrl.protocol !== 'https:' && baseUrl.protocol !== 'http:') return url;
+
+		const basePath = baseUrl.pathname.replace(/\/$/, '');
+		return `${baseUrl.origin}${basePath}${fileUrl.pathname}${fileUrl.search}${fileUrl.hash}`;
 	}
 
 	@bindThis
@@ -231,7 +299,7 @@ export class DriveFileEntityService {
 			isSensitive: file.isSensitive,
 			blurhash: file.blurhash,
 			properties: opts.self ? file.properties : this.getPublicProperties(file),
-			url: opts.self ? file.url : this.getPublicUrl(file),
+			url: opts.self ? file.url : this.getPublicUrl({ file }),
 			thumbnailUrl: this.getThumbnailUrl(file),
 			comment: file.comment,
 			folderId: file.folderId,
@@ -270,7 +338,7 @@ export class DriveFileEntityService {
 			isSensitive: file.isSensitive,
 			blurhash: file.blurhash,
 			properties: opts.self ? file.properties : this.getPublicProperties(file),
-			url: opts.self ? file.url : this.getPublicUrl(file),
+			url: opts.self ? file.url : this.getPublicUrl({ file }),
 			thumbnailUrl: this.getThumbnailUrl(file),
 			comment: file.comment,
 			folderId: file.folderId,

@@ -61,7 +61,7 @@ import { i18n } from '@/i18n.js';
 import { prefer } from '@/preferences.js';
 import MkEvent from '@/components/MkEvent.vue';
 import { useRouter } from '@/router.js';
-import { notePage } from '@/filters/note.js';
+import { notePage } from '@@/js/note.js';
 import MkInfo from '@/components/MkInfo.vue';
 
 const props = withDefaults(defineProps<{

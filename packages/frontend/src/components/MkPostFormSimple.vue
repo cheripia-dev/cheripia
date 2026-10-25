@@ -39,10 +39,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 						<span v-if="searchableBy === 'private'"><i class="ti ti-mail-search"></i></span>
 						<span :class="$style.headerRightButtonText">{{ i18n.ts._searchbility[searchableBy] }}</span>
 					</button>
-					<button v-if="targetChannel!=null" class="_button" :class="[$style.headerRightItem, $style.visibility]" disabled>
-						<span><i class="ti ti-device-tv"></i></span>
-						<span :class="$style.headerRightButtonText">{{ targetChannel.name }}</span>
-					</button>
 				</template>
 				<div :class="$style.submit">
 					<button v-click-anime class="_button" :class="$style.submitButton" :disabled="!canPost" data-testid="post-form-simple-submit" @click="post">
@@ -141,7 +137,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { inject, watch, nextTick, onMounted, defineAsyncComponent, provide, shallowRef, ref, computed, useTemplateRef, onUnmounted } from 'vue';
-import * as mfm from 'mfc-js';
+import * as mfm from 'mfm-js';
 import * as Misskey from 'misskey-js';
 import insertTextAtCursor from 'insert-text-at-cursor';
 import { toASCII } from 'punycode.js';
@@ -311,12 +307,17 @@ const placeholder = computed((): string => {
 
 	if (!$i) {
 		return i18n.ts._postForm.signinRequiredPlaceholder;
+	} else if (targetChannel.value) {
+		const name = targetChannel.value.name;
+		return postTo + (renoteTargetNote.value
+			? i18n.tsx._postForm.channelQuotePlaceholder({ name })
+			: replyTargetNote.value
+				? i18n.tsx._postForm.channelReplyPlaceholder({ name })
+				: i18n.tsx._postForm.channelPlaceholderWithName({ name }));
 	} else if (renoteTargetNote.value) {
 		return postTo + i18n.ts._postForm.quotePlaceholder;
 	} else if (replyTargetNote.value) {
 		return postTo + i18n.ts._postForm.replyPlaceholder;
-	} else if (targetChannel.value) {
-		return postTo + i18n.ts._postForm.channelPlaceholder;
 	} else {
 		const xs = [
 			i18n.ts._postForm._placeholders.a,
@@ -1933,8 +1934,8 @@ defineExpose({
 }
 
 .preview {
-	padding: 16px 20px;
-	// min-height: 75px;
+	padding: 16px 20px 0 20px;
+	min-height: 75px;
 	max-height: 150px;
 	overflow: auto;
 	background-size: auto auto;
@@ -2184,7 +2185,7 @@ input.hashtags {
 	}
 
 	.preview {
-		padding: 16px 14px;
+		padding: 16px 14px 0 14px;
 	}
 
 	.withQuote {

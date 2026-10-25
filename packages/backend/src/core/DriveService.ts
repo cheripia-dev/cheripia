@@ -204,7 +204,7 @@ export class DriveService {
 			requestIp?: MiDriveFile['requestIp'],
 			requestHeaders?: MiDriveFile['requestHeaders'],
 		}): Promise<MiDriveFile> {
-		// yojo-art: 暫定。ローカル対応のみ
+		// cheripia: 暫定。ローカル対応のみ
 		const isRemote = false;
 		if (!opts.file.accessKey) throw new Error('accessKey is null');
 		if (opts.file.userHost !== null) throw new Error('copying a file stored for a remote user is not supported yet');

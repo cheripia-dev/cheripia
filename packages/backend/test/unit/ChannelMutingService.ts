@@ -183,7 +183,7 @@ describe('ChannelMutingService', () => {
 		});
 
 		test('idOnly', async () => {
-			// yojo-art: キャッシュを読むのでServiceの機能を使って登録し、キャッシュを作成する
+			// cheripia: キャッシュを読むのでServiceの機能を使って登録し、キャッシュを作成する
 			await service.mute({ requestUserId: alice.id, targetChannelId: channel1.id });
 			await service.mute({ requestUserId: alice.id, targetChannelId: channel2.id });
 			await service.mute({ requestUserId: bob.id, targetChannelId: channel3.id });
@@ -204,7 +204,7 @@ describe('ChannelMutingService', () => {
 			past.setMinutes(past.getMinutes() - 1);
 			future.setMinutes(future.getMinutes() + 1);
 
-			// yojo-art: キャッシュを読むのでServiceの機能を使って登録し、キャッシュを作成する
+			// cheripia: キャッシュを読むのでServiceの機能を使って登録し、キャッシュを作成する
 			await service.mute({ requestUserId: alice.id, targetChannelId: channel1.id, expiresAt: past });
 			await service.mute({ requestUserId: alice.id, targetChannelId: channel2.id, expiresAt: null });
 			await service.mute({ requestUserId: alice.id, targetChannelId: channel3.id, expiresAt: future });

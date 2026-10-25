@@ -572,7 +572,7 @@ const extension_context_definition = {
 	},
 	'_misskey_talk': 'misskey:_misskey_talk',
 	'isCat': 'misskey:isCat',
-	// yojo-art
+	// cheripia
 	yojoart: 'https://yojoart.kzkr.xyz/ns#',
 	'banner': 'yojoart:banner',
 	'Game': 'yojoart:Game',

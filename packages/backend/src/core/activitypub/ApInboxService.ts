@@ -335,14 +335,25 @@ export class ApInboxService {
 			return 'skip: room not found';
 		}
 
-		// Delete the invitation
+		// Only a genuine locally-owned room may gain members via Accept.
+		// A copy of a remote room is owned by the remote inviter; letting an
+		// arbitrary remote actor join it here would bypass the owner's Invite.
+		const owner = await this.usersRepository.findOneBy({ id: room.ownerId });
+		if (!owner || !this.userEntityService.isLocalUser(owner)) {
+			return 'skip: room is not locally owned';
+		}
+
+		// The acceptor must have been invited. Without this check any signed
+		// remote actor can join an arbitrary local room by sending
+		// Accept(Invite(roomId)) without ever receiving an invitation.
 		const invitation = await this.chatRoomInvitationsRepository.findOneBy({
 			roomId,
 			userId: actor.id,
 		});
-		if (invitation) {
-			await this.chatRoomInvitationsRepository.delete(invitation.id);
+		if (!invitation) {
+			return 'skip: invitation not found';
 		}
+		await this.chatRoomInvitationsRepository.delete(invitation.id);
 
 		// Check if already a member
 		const existingMembership = await this.chatService.isRoomMember(room, actor.id);
@@ -488,7 +499,7 @@ export class ApInboxService {
 					//リモートユーザーによるローカルのチャンネルへの投稿
 					const user = { id: channel.actor.id, host: null };
 					if (activity.signature) {
-						//yojo-art: チャンネル連合 内容に署名されていれば転送する
+						//cheripia: チャンネル連合 内容に署名されていれば転送する
 						const dm = this.apDeliverManagerService.createDeliverManager(user, activity);
 						dm.addChannelFollowersRecipe(user.id);
 						trackPromise(dm.execute());
@@ -1357,6 +1368,13 @@ export class ApInboxService {
 		const roomUri = getApId(roomObject);
 		if (!roomUri) return 'skip: invalid room object';
 
+		// The room must belong to the sender's instance. A room URI pointing
+		// at our own host (or any third-party host) is either a forged
+		// reference to a genuine local room or a squatting attempt.
+		if (this.utilityService.extractDbHost(roomUri) !== this.utilityService.extractDbHost(actor.uri)) {
+			return 'skip: room host does not match actor host';
+		}
+
 		// Extract room ID from URI (format: https://example.com/chat/rooms/{roomId})
 		const roomIdMatch = roomUri.match(/\/chat\/rooms\/([a-zA-Z0-9]+)$/);
 		if (!roomIdMatch) return 'skip: invalid room URI format';
@@ -1373,12 +1391,30 @@ export class ApInboxService {
 		// Check if the room already exists locally
 		let room = await this.chatRoomsRepository.findOneBy({ id: roomId });
 
+		if (room) {
+			// Never inject invitations into a genuine local room, and never
+			// let a sender claim another user's room copy: the stored copy
+			// must be owned by the sender themselves.
+			const existingOwner = await this.usersRepository.findOneBy({ id: room.ownerId });
+			if (!existingOwner || this.userEntityService.isLocalUser(existingOwner)) {
+				return 'skip: room is a local room';
+			}
+			if (room.ownerId !== actor.id) {
+				return 'skip: room is owned by another user';
+			}
+		}
+
 		// If the room doesn't exist, create a local copy for the remote room
 		if (!room) {
-			const roomName = typeof roomObject.name === 'string' ? roomObject.name : 'Remote Chat Room';
-			const roomDescription = typeof roomObject.summary === 'string' ? roomObject.summary : '';
+			// Truncate to the ChatRoom column limits (name: varchar(256),
+			// description: varchar(2048)) so overlong remote strings cannot
+			// cause DB errors and inbox retry amplification.
+			const roomName = (typeof roomObject.name === 'string' ? roomObject.name : 'Remote Chat Room').slice(0, 256);
+			const roomDescription = (typeof roomObject.summary === 'string' ? roomObject.summary : '').slice(0, 2048);
 
-			// Extract owner from attributedTo field
+			// The inviter must be the room owner. Only the sender themselves
+			// may be recorded as owner; a claim pointing at a local user (or
+			// anyone else) is an ownership forgery.
 			let ownerId = actor.id; // Default to actor if attributedTo is not available
 
 			if (roomObject.attributedTo) {
@@ -1388,12 +1424,14 @@ export class ApInboxService {
 					: roomObject.attributedTo;
 				const ownerUri = getApHrefNullable(attributedTo);
 
-				if (ownerUri) {
-					const owner = await this.apDbResolverService.getUserFromApId(ownerUri);
-					if (owner) {
-						ownerId = owner.id;
-					}
+				if (!ownerUri || this.utilityService.extractDbHost(ownerUri) !== this.utilityService.extractDbHost(actor.uri)) {
+					return 'skip: room owner must be the actor';
 				}
+				const owner = await this.apDbResolverService.getUserFromApId(ownerUri);
+				if (!owner || this.userEntityService.isLocalUser(owner) || owner.id !== actor.id) {
+					return 'skip: room owner must be the actor';
+				}
+				ownerId = owner.id;
 			}
 
 			room = await this.chatRoomsRepository.insertOne({

@@ -4,7 +4,7 @@
  */
 
 import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
-import * as mfm from 'mfc-js';
+import * as mfm from 'mfm-js';
 import * as Redis from 'ioredis';
 import { Brackets, In } from 'typeorm';
 import { DI } from '@/di-symbols.js';
@@ -749,7 +749,16 @@ export class ChatService implements OnApplicationShutdown {
 			throw new Error('room is full');
 		}
 
-		// TODO: cehck block
+		const [blocked, blocking] = await Promise.all([
+			this.userBlockingService.checkBlocked(inviteeId, inviterId),
+			this.userBlockingService.checkBlocked(inviterId, inviteeId),
+		]);
+		if (blocked) {
+			throw new Error('blocked');
+		}
+		if (blocking) {
+			throw new Error('blocking');
+		}
 
 		const invitation = {
 			id: this.idService.gen(),

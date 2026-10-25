@@ -6,7 +6,7 @@
 import { setImmediate } from 'node:timers/promises';
 import { In, DataSource } from 'typeorm';
 import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
-import * as mfm from 'mfc-js';
+import * as mfm from 'mfm-js';
 import type { IMentionedRemoteUsers } from '@/models/Note.js';
 import { MiNote } from '@/models/Note.js';
 import { MiEvent } from '@/models/Event.js';
@@ -25,7 +25,7 @@ import { bindThis } from '@/decorators.js';
 import { DB_MAX_NOTE_TEXT_LENGTH } from '@/const.js';
 import { SearchService } from '@/core/SearchService.js';
 import { AdvancedSearchService } from '@/core/AdvancedSearchService.js';
-import { normalizeForSearch } from '@/misc/normalize-for-search.js';
+import { normalizeTag } from '@/misc/normalize-tag.js';
 import { MiDriveFile } from '@/models/_.js';
 import { MiPoll, IPoll } from '@/models/Poll.js';
 import { concat } from '@/misc/prelude/array.js';
@@ -101,7 +101,7 @@ export class NoteUpdateService implements OnApplicationShutdown {
 		if (data.text) {
 			note.channel ??= note.channelId ? await this.channelsRepository.findOneBy({ id: note.channelId }) : null;
 			if (note.channel) {
-			// yojo-art: チャンネル投稿のチャンネルへのメンションは表示しない
+			// cheripia: チャンネル投稿のチャンネルへのメンションは表示しない
 				note.channel.actor ??= note.channel.actorId ? await this.cacheService.findUserById(note.channel.actorId) : null;
 				const username = note.channel.actor?.username;
 				if (username) {
@@ -173,7 +173,7 @@ export class NoteUpdateService implements OnApplicationShutdown {
 			hasPoll: data.poll != null,
 			hasEvent: data.event != null,
 			cw: data.cw ?? null,
-			tags: tags.map(tag => normalizeForSearch(tag)),
+			tags: tags.map(tag => normalizeTag(tag)),
 			emojis,
 			attachedFileTypes: data.files ? data.files.map(file => file.type) : [],
 			updatedAtHistory: [...updatedAtHistory, new Date()],

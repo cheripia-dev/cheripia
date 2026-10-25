@@ -455,6 +455,7 @@ function toStories(component: string): Promise<string> {
 		globSync('src/components/Mk[B-E]*.vue'),
 		globSync('src/components/MkFlashPreview.vue'),
 		globSync('src/components/MkGalleryPostPreview.vue'),
+		globSync('src/components/MkMath.vue'),
 		globSync('src/components/MkSignupServerRules.vue'),
 		globSync('src/components/MkUserSetupDialog.vue'),
 		globSync('src/components/MkUserSetupDialog.*.vue'),

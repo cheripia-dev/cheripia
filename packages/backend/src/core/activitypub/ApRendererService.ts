@@ -6,7 +6,7 @@
 import { createPublicKey, randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { In } from 'typeorm';
-import * as mfm from 'mfc-js';
+import * as mfm from 'mfm-js';
 import { DI } from '@/di-symbols.js';
 import type { Config } from '@/config.js';
 import type { MiPartialLocalUser, MiLocalUser, MiPartialRemoteUser, MiRemoteUser, MiUser } from '@/models/User.js';
@@ -159,7 +159,7 @@ export class ApRendererService {
 		} else {
 			throw new Error('renderAnnounce: cannot render non-public note');
 		}
-		//yojo-art: チャンネル連合 チャンネル投稿は宛先にチャンネルアカウントのフォロワーを含める
+		//cheripia: チャンネル連合 チャンネル投稿は宛先にチャンネルアカウントのフォロワーを含める
 		const channelFollowersUri = (note.channelId && note.userId) ? await this.getChannelFollowersUri(note as MiNote & { channelId: string }) : null;
 		if (channelFollowersUri && !to.includes(channelFollowersUri) && !cc.includes(channelFollowersUri)) {
 			cc.push(channelFollowersUri);
@@ -219,7 +219,7 @@ export class ApRendererService {
 		if (object.to) activity.to = object.to;
 		if (object.cc) activity.cc = object.cc;
 		if (Array.isArray(activity.to) && Array.isArray(activity.cc)) {
-			//yojo-art: チャンネル連合 チャンネル投稿は宛先にチャンネルアカウントのフォロワーを含める
+			//cheripia: チャンネル連合 チャンネル投稿は宛先にチャンネルアカウントのフォロワーを含める
 			if (channelFollowersUri && !activity.to.includes(channelFollowersUri) && !activity.cc.includes(channelFollowersUri)) {
 				activity.cc.push(channelFollowersUri);
 			}
@@ -248,7 +248,7 @@ export class ApRendererService {
 		return {
 			type: 'Document',
 			mediaType: file.webpublicType ?? file.type,
-			url: this.driveFileEntityService.getPublicUrl(file, undefined, true),
+			url: this.driveFileEntityService.getPublicUrl({ file: file, ap: true, allowProxiedUrl: false }),
 			name: file.comment,
 			width: file.properties?.width,
 			height: file.properties?.height,
@@ -258,6 +258,9 @@ export class ApRendererService {
 
 	@bindThis
 	public renderEmoji(emoji: MiEmoji): IApEmoji {
+		// || emoji.originalUrl してるのは後方互換性のため（publicUrlはstringなので??はだめ）
+		const url = emoji.publicUrl || emoji.originalUrl;
+
 		return {
 			id: `${this.config.url}/emojis/${emoji.name}`,
 			type: 'Emoji',
@@ -266,8 +269,7 @@ export class ApRendererService {
 			icon: {
 				type: 'Image',
 				mediaType: emoji.type ?? 'image/png',
-				// || emoji.originalUrl してるのは後方互換性のため（publicUrlはstringなので??はだめ）
-				url: emoji.publicUrl || emoji.originalUrl,
+				url: emoji.host == null ? this.driveFileEntityService.applyApFileBaseUrlToLocalFileUrl(url) : url,
 			},
 			_misskey_license: {
 				freeText: emoji.license,
@@ -345,7 +347,7 @@ export class ApRendererService {
 	public renderImage(file: MiDriveFile): IApImage {
 		return {
 			type: 'Image',
-			url: this.driveFileEntityService.getPublicUrl(file, undefined, true),
+			url: this.driveFileEntityService.getPublicUrl({ file: file, ap: true, allowProxiedUrl: false }),
 			sensitive: file.isSensitive,
 			name: file.comment,
 		};
@@ -534,7 +536,7 @@ export class ApRendererService {
 		} else {
 			to = mentions;
 		}
-		//yojo-art: チャンネル連合 チャンネル投稿は宛先にチャンネルアカウントのフォロワーを含める
+		//cheripia: チャンネル連合 チャンネル投稿は宛先にチャンネルアカウントのフォロワーを含める
 		const channelFollowersUri = (note.channelId && note.userId) ? await this.getChannelFollowersUri(note as MiNote & { channelId: string }) : null;
 		if (channelFollowersUri && !to.includes(channelFollowersUri) && !cc.includes(channelFollowersUri)) {
 			cc.push(channelFollowersUri);
@@ -609,7 +611,7 @@ export class ApRendererService {
 
 		const summary = note.cw === '' ? String.fromCharCode(0x200B) : note.cw;
 
-		// yojo-art: note本体は書き換えず、描画に必要なフィールドだけ差し替えたビューを渡す
+		// cheripia: note本体は書き換えず、描画に必要なフィールドだけ差し替えたビューを渡す
 		const { content, noMisskeyContent } = this.apMfmService.getNoteHtml(
 			{ text, mentionedRemoteUsers: mentionedRemoteUsersJson },
 			extraHtml,

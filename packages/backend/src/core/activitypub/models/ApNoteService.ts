@@ -240,7 +240,7 @@ export class ApNoteService {
 		}
 		let channel = null as MiChannel | null;
 		if (actor.channelId) {
-			//yojo-art: チャンネルアカウントによる投稿はすべてチャンネル投稿
+			//cheripia: チャンネルアカウントによる投稿はすべてチャンネル投稿
 			channel = await this.channelsRepository.findOneBy({ id: actor.channelId });
 			if (channel)channel.actor = actor;
 		} else {

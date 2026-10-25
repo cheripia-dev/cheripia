@@ -4,7 +4,7 @@
  */
 
 import { setImmediate } from 'node:timers/promises';
-import * as mfm from 'mfc-js';
+import * as mfm from 'mfm-js';
 import { In, DataSource, IsNull, LessThan, Any } from 'typeorm';
 import * as Redis from 'ioredis';
 import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
@@ -25,7 +25,7 @@ import type { IPoll } from '@/models/Poll.js';
 import { MiPoll } from '@/models/Poll.js';
 import { isDuplicateKeyValueError } from '@/misc/is-duplicate-key-value-error.js';
 import type { MiChannel } from '@/models/Channel.js';
-import { normalizeForSearch } from '@/misc/normalize-for-search.js';
+import { normalizeTag } from '@/misc/normalize-tag.js';
 import { RelayService } from '@/core/RelayService.js';
 import { FederatedInstanceService } from '@/core/FederatedInstanceService.js';
 import { DI } from '@/di-symbols.js';
@@ -61,6 +61,7 @@ import { sanitizeEventMetadata } from '@/misc/sanitize-event-metadata.js';
 import { CollapsedQueue } from '@/misc/collapsed-queue.js';
 import { CacheService } from '@/core/CacheService.js';
 import { isQuote, isRenote } from '@/misc/is-renote.js';
+import { extractUrlsForKeyWordCheck } from '@/misc/extract-urls-for-keyword-check.js';
 import { removeChannelMention } from '@/misc/escape-reg-exp.js';
 import { searchableTypes } from '../types.js';
 
@@ -499,7 +500,8 @@ export class NoteCreateService implements OnApplicationShutdown {
 
 		if (data.visibility === 'public') {
 			const sensitiveWords = this.meta.sensitiveWords;
-			if (this.utilityService.isKeyWordIncluded(data.cw ?? data.text ?? '', sensitiveWords)) {
+			const sensitiveWordsTarget = data.cw ?? data.text ?? '';
+			if (sensitiveWords.length > 0 && this.utilityService.isKeyWordIncluded([sensitiveWordsTarget, ...extractUrlsForKeyWordCheck(sensitiveWordsTarget)].join('\n'), sensitiveWords)) {
 				data.visibility = 'home';
 			} else if ((await this.roleService.getUserPolicies(user.id)).canPublicNote === false) {
 				data.visibility = 'home';
@@ -523,7 +525,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 		}
 
 		if (data.text && data.channel) {
-			// yojo-art: チャンネル投稿のチャンネルへのメンションは表示しない
+			// cheripia: チャンネル投稿のチャンネルへのメンションは表示しない
 			data.channel.actor ??= data.channel.actorId ? await this.cacheService.findUserById(data.channel.actorId) : null;
 			const username = data.channel.actor?.username;
 			if (username) {
@@ -707,7 +709,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 			hasPoll: data.poll != null,
 			hasEvent: data.event != null,
 			cw: data.cw ?? null,
-			tags: tags.map(tag => normalizeForSearch(tag)),
+			tags: tags.map(tag => normalizeTag(tag)),
 			emojis,
 			userId: user.id,
 			localOnly: data.localOnly!,
@@ -850,7 +852,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 
 		this.pushToTl(note, user);
 
-		this.antennaService.addNoteToAntennas({
+		const matchedAntennas = this.antennaService.addNoteToAntennas({
 			...note,
 			channel: data.channel ?? null,
 		}, user);
@@ -917,6 +919,12 @@ export class NoteCreateService implements OnApplicationShutdown {
 
 			this.roleService.addNoteToRoleTimeline(noteObj);
 
+			matchedAntennas.then(antennas => {
+				for (const antenna of antennas) {
+					this.globalEventService.publishAntennaStream(antenna.id, 'note', noteObj);
+				}
+			});
+
 			this.webhookService.enqueueUserWebhook(user.id, 'note', { note: noteObj });
 
 			const nm = new NotificationManager(this.mutingsRepository, this.notificationService, this.followingsRepository, user, note);
@@ -975,7 +983,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 					}
 
 					if (note.channel != null && user.channelId === null && note.channel.actorId) {
-						// yojo-art: チャンネルのフォロワーに配送
+						// cheripia: チャンネルのフォロワーに配送
 						if (isPureRenote) {
 							//チャンネル内リノート
 							dm.addChannelFollowersRecipe(note.channel.actorId);
@@ -1031,7 +1039,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 			//#endregion
 		}
 
-		// yojo-art: チャンネルアカウントの自動リノートは除外する
+		// cheripia: チャンネルアカウントの自動リノートは除外する
 		if (data.channel && !user.channelId) {
 			this.channelsRepository.increment({ id: data.channel.id }, 'notesCount', 1);
 			this.channelsRepository.update(data.channel.id, {
@@ -1361,9 +1369,20 @@ export class NoteCreateService implements OnApplicationShutdown {
 			prohibitedWords = this.meta.prohibitedWords;
 		}
 
+		if (prohibitedWords.length === 0) {
+			return false;
+		}
+
 		if (
 			this.utilityService.isKeyWordIncluded(
-				this.utilityService.concatNoteContentsForKeyWordCheck(content),
+				this.utilityService.concatNoteContentsForKeyWordCheck({
+					...content,
+					others: [
+						...(content.others ?? []),
+						...extractUrlsForKeyWordCheck(content.cw ?? ''),
+						...extractUrlsForKeyWordCheck(content.text ?? ''),
+					],
+				}),
 				prohibitedWords,
 			)
 		) {

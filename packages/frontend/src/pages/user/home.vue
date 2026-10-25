@@ -120,7 +120,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 								<div :class="$style.mutualLinks">
 									<div v-for="mutualLink in section.mutualLinks" :key="mutualLink.id">
 										<MkLink :hideIcon="true" :url="mutualLink.url">
-											<img :class="$style.mutualLinkImg" :src="getProxiedImageUrlNullable(mutualLink.imgSrc) ?? ''" :alt="mutualLink.description ?? ''"/>
+											<img :class="$style.mutualLinkImg" :src="mutualLink.imgSrc" :alt="mutualLink.description ?? ''"/>
 										</MkLink>
 									</div>
 								</div>
@@ -215,7 +215,7 @@ import MkInfo from '@/components/MkInfo.vue';
 import MkButton from '@/components/MkButton.vue';
 import { getUserMenu } from '@/utility/get-user-menu.js';
 import number from '@/filters/number.js';
-import { userPage } from '@/filters/user.js';
+import { userPage } from '@@/js/user.js';
 import * as os from '@/os.js';
 import { i18n } from '@/i18n.js';
 import { $i, iAmModerator } from '@/i.js';
@@ -224,7 +224,7 @@ import { confetti } from '@/utility/confetti.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { isFollowingVisibleForMe, isFollowersVisibleForMe } from '@/utility/isFfVisibleForMe.js';
 import { useRouter } from '@/router.js';
-import { getStaticImageUrl, getProxiedImageUrl, getProxiedImageUrlNullable } from '@/utility/media-proxy.js';
+import { getStaticImageUrl } from '@/utility/media-proxy.js';
 import MkSparkle from '@/components/MkSparkle.vue';
 import { prefer } from '@/preferences.js';
 import MkPullToRefresh from '@/components/MkPullToRefresh.vue';

@@ -70,7 +70,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 								</SearchMarker>
 
 								<SearchMarker>
-									<MkInput v-model="objectStorageForm.state.objectStorageSecretKey" type="password" autocomplete="new-password">
+									<MkInput v-model="objectStorageForm.state.objectStorageSecretKey" type="password" autocomplete="new-password" :placeholder="meta.hasObjectStorageSecretKey ? i18n.ts.leaveEmptyToKeepCurrent.toString() : ''">
 										<template #prefix><i class="ti ti-key"></i></template>
 										<template #label>Secret key<span v-if="objectStorageForm.modifiedStates.objectStorageSecretKey" class="_modified">{{ i18n.ts.modified }}</span></template>
 									</MkInput>
@@ -170,7 +170,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 								</SearchMarker>
 
 								<SearchMarker>
-									<MkInput v-model="remoteObjectStorageForm.state.remoteObjectStorageSecretKey" type="password" autocomplete="new-password">
+									<MkInput v-model="remoteObjectStorageForm.state.remoteObjectStorageSecretKey" type="password" autocomplete="new-password" :placeholder="meta.hasRemoteObjectStorageSecretKey ? i18n.ts.leaveEmptyToKeepCurrent.toString() : ''">
 										<template #prefix><i class="ti ti-key"></i></template>
 										<template #label>Secret key<span v-if="remoteObjectStorageForm.modifiedStates.remoteObjectStorageSecretKey" class="_modified">{{ i18n.ts.modified }}</span></template>
 									</MkInput>
@@ -237,7 +237,7 @@ const objectStorageForm = useForm({
 	objectStorageEndpoint: meta.objectStorageEndpoint,
 	objectStorageRegion: meta.objectStorageRegion,
 	objectStorageAccessKey: meta.objectStorageAccessKey,
-	objectStorageSecretKey: meta.objectStorageSecretKey,
+	objectStorageSecretKey: '',
 	objectStorageUseSSL: meta.objectStorageUseSSL,
 	objectStorageUseProxy: meta.objectStorageUseProxy,
 	objectStorageSetPublicRead: meta.objectStorageSetPublicRead,
@@ -251,7 +251,7 @@ const objectStorageForm = useForm({
 		objectStorageEndpoint: state.objectStorageEndpoint,
 		objectStorageRegion: state.objectStorageRegion,
 		objectStorageAccessKey: state.objectStorageAccessKey,
-		objectStorageSecretKey: state.objectStorageSecretKey,
+		objectStorageSecretKey: state.objectStorageSecretKey === '' ? undefined : state.objectStorageSecretKey,
 		objectStorageUseSSL: state.objectStorageUseSSL,
 		objectStorageUseProxy: state.objectStorageUseProxy,
 		objectStorageSetPublicRead: state.objectStorageSetPublicRead,
@@ -268,7 +268,7 @@ const remoteObjectStorageForm = useForm({
 	remoteObjectStorageEndpoint: meta.remoteObjectStorageEndpoint,
 	remoteObjectStorageRegion: meta.remoteObjectStorageRegion,
 	remoteObjectStorageAccessKey: meta.remoteObjectStorageAccessKey,
-	remoteObjectStorageSecretKey: meta.remoteObjectStorageSecretKey,
+	remoteObjectStorageSecretKey: '',
 	remoteObjectStorageUseSSL: meta.remoteObjectStorageUseSSL,
 	remoteObjectStorageUseProxy: meta.remoteObjectStorageUseProxy,
 	remoteObjectStorageSetPublicRead: meta.remoteObjectStorageSetPublicRead,
@@ -282,7 +282,7 @@ const remoteObjectStorageForm = useForm({
 		remoteObjectStorageEndpoint: state.remoteObjectStorageEndpoint,
 		remoteObjectStorageRegion: state.remoteObjectStorageRegion,
 		remoteObjectStorageAccessKey: state.remoteObjectStorageAccessKey,
-		remoteObjectStorageSecretKey: state.remoteObjectStorageSecretKey,
+		remoteObjectStorageSecretKey: state.remoteObjectStorageSecretKey === '' ? undefined : state.remoteObjectStorageSecretKey,
 		remoteObjectStorageUseSSL: state.remoteObjectStorageUseSSL,
 		remoteObjectStorageUseProxy: state.remoteObjectStorageUseProxy,
 		remoteObjectStorageSetPublicRead: state.remoteObjectStorageSetPublicRead,

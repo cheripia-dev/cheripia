@@ -156,7 +156,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script lang="ts" setup>
 import { computed, inject, ref } from 'vue';
-import * as mfm from 'mfc-js';
+import * as mfm from 'mfm-js';
 import * as Misskey from 'misskey-js';
 import { shouldCollapsed, shouldMfmCollapsed } from '@@/js/collapsed.js';
 import { url } from '@@/js/config.js';
@@ -172,8 +172,8 @@ import EmAvatar from '@/components/EmAvatar.vue';
 import EmTime from '@/components/EmTime.vue';
 import EmUserName from '@/components/EmUserName.vue';
 import EmAcct from '@/components/EmAcct.vue';
-import { userPage } from '@/utils.js';
-import { notePage } from '@/utils.js';
+import { userPage } from '@@/js/user.js';
+import { notePage } from '@@/js/note.js';
 import { i18n } from '@/i18n.js';
 import { DI } from '@/di.js';
 import number from '@/filters/number.js';

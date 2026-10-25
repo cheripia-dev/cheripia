@@ -11,6 +11,7 @@ import { ModerationLogService } from '@/core/ModerationLogService.js';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { MetaService } from '@/core/MetaService.js';
 import { ServerStatsService } from '@/daemons/ServerStatsService.js';
+import { maskMetaSecrets } from '@/misc/mask-secret.js';
 
 export const meta = {
 	tags: ['admin'],
@@ -550,7 +551,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}
 
 			if (ps.smtpPass !== undefined) {
-				set.smtpPass = ps.smtpPass;
+				if (ps.smtpPass === '') {
+					set.smtpPass = null;
+				} else {
+					set.smtpPass = ps.smtpPass;
+				}
 			}
 
 			if (ps.enableServiceWorker !== undefined) {
@@ -562,7 +567,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}
 
 			if (ps.swPrivateKey !== undefined) {
-				set.swPrivateKey = ps.swPrivateKey;
+				if (ps.swPrivateKey === '') {
+					set.swPrivateKey = null;
+				} else {
+					set.swPrivateKey = ps.swPrivateKey;
+				}
 			}
 
 			if (ps.tosUrl !== undefined) {
@@ -678,7 +687,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}
 
 			if (ps.remoteObjectStorageSecretKey !== undefined) {
-				set.remoteObjectStorageSecretKey = ps.remoteObjectStorageSecretKey;
+				if (ps.remoteObjectStorageSecretKey === '') {
+					set.remoteObjectStorageSecretKey = null;
+				} else {
+					set.remoteObjectStorageSecretKey = ps.remoteObjectStorageSecretKey;
+				}
 			}
 
 			if (ps.remoteObjectStorageUseSSL !== undefined) {
@@ -718,7 +731,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}
 
 			if (ps.ctav3SaKey !== undefined) {
-				set.ctav3SaKey = ps.ctav3SaKey;
+				if (ps.ctav3SaKey === '') {
+					set.ctav3SaKey = null;
+				} else {
+					set.ctav3SaKey = ps.ctav3SaKey;
+				}
 			}
 
 			if (ps.ctav3ProjectId !== undefined) {
@@ -742,7 +759,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			}
 
 			if (ps.libreTranslateApiKey !== undefined) {
-				set.libreTranslateApiKey = ps.libreTranslateApiKey;
+				if (ps.libreTranslateApiKey === '') {
+					set.libreTranslateApiKey = null;
+				} else {
+					set.libreTranslateApiKey = ps.libreTranslateApiKey;
+				}
 			}
 
 			if (ps.enableIpLogging !== undefined) {
@@ -994,8 +1015,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			const after = await this.metaService.fetch(true);
 
 			this.moderationLogService.log(me, 'updateServerSettings', {
-				before,
-				after,
+				before: maskMetaSecrets(before),
+				after: maskMetaSecrets(after),
 			});
 
 			if (set.enableServerMachineStats === true) {
