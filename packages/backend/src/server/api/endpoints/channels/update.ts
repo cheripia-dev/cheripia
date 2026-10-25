@@ -14,7 +14,7 @@ import { RoleService } from '@/core/RoleService.js';
 import { NotePiningService } from '@/core/NotePiningService.js';
 import { extractCustomEmojisFromMfm } from '@/misc/extract-custom-emojis-from-mfm.js';
 import { extractHashtags } from '@/misc/extract-hashtags.js';
-import { normalizeForSearch } from '@/misc/normalize-for-search.js';
+import { normalizeTag } from '@/misc/normalize-tag.js';
 import { GlobalEventService } from '@/core/GlobalEventService.js';
 import { HashtagService } from '@/core/HashtagService.js';
 import { DriveFileEntityService } from '@/core/entities/DriveFileEntityService.js';
@@ -240,7 +240,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 						if (ps.description != null) {
 							const tokens = mfm.parse(ps.description);
 							emojis = emojis.concat(extractCustomEmojisFromMfm(tokens));
-							tags = extractHashtags(tokens).map(tag => normalizeForSearch(tag)).splice(0, 32);
+							tags = extractHashtags(tokens).map(tag => normalizeTag(tag)).splice(0, 32);
 						}
 
 						updates.emojis = emojis;

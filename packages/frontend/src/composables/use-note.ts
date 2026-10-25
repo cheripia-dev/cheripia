@@ -9,6 +9,7 @@ import { isLink } from '@@/js/is-link.js';
 import { shouldCollapsed, shouldMfmCollapsed, shouldAnimatedMfm } from '@@/js/collapsed.js';
 import { host } from '@@/js/config.js';
 import { toUnicode } from 'punycode.js';
+import { notePage } from '@@/js/note.js';
 import type { Ref } from 'vue';
 import type { OpenOnRemoteOptions } from '@/utility/please-login.js';
 import type { TranslateStatus } from '@/utility/translate.js';
@@ -45,7 +46,6 @@ import { notesReactionsCreate } from '@/utility/check-reaction-create';
 import MkUsersTooltip from '@/components/MkUsersTooltip.vue';
 import MkReactionsViewerDetails from '@/components/MkReactionsViewer.details.vue';
 import MkRippleEffect from '@/components/MkRippleEffect.vue';
-import { notePage } from '@/filters/note.js';
 
 export interface UseNoteProps {
 	note: Misskey.entities.Note;

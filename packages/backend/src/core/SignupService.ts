@@ -29,7 +29,7 @@ import { SystemAccountService } from '@/core/SystemAccountService.js';
 import { MetaService } from '@/core/MetaService.js';
 import { extractCustomEmojisFromMfm } from '@/misc/extract-custom-emojis-from-mfm.js';
 import { extractHashtags } from '@/misc/extract-hashtags.js';
-import { normalizeForSearch } from '@/misc/normalize-for-search.js';
+import { normalizeTag } from '@/misc/normalize-tag.js';
 
 @Injectable()
 export class SignupService {
@@ -135,6 +135,15 @@ export class SignupService {
 
 		// Start transaction
 		await this.db.transaction(async transactionalEntityManager => {
+			// ローカルユーザーのユーザー名は host が NULL のため、(usernameLower, host) の
+			// 複合ユニークインデックスでは重複を防げない（NULLは互いにdistinct扱い）。
+			// 同一ユーザー名の並行サインアップをトランザクション単位のadvisory lockで直列化し、
+			// チェック→挿入のTOCTOU競合を排除する。
+			await transactionalEntityManager.query(
+				'SELECT pg_advisory_xact_lock(hashtext($1))',
+				[`signup:username:${username.toLowerCase()}`],
+			);
+
 			const exist = await transactionalEntityManager.findOneBy(MiUser, {
 				usernameLower: username.toLowerCase(),
 				host: IsNull(),
@@ -252,7 +261,7 @@ export class SignupService {
 		if (description != null) {
 			const tokens = mfm.parse(description);
 			emojis = emojis.concat(extractCustomEmojisFromMfm(tokens));
-			tags = extractHashtags(tokens).map(tag => normalizeForSearch(tag)).splice(0, 32);
+			tags = extractHashtags(tokens).map(tag => normalizeTag(tag)).splice(0, 32);
 		}
 		let account!: MiUser;
 		let channel!:MiChannel;

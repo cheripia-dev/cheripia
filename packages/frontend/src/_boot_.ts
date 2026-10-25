@@ -13,7 +13,7 @@ if (import.meta.env.DEV) {
 }
 
 import '@/style.scss';
-import '@/Temml-Latin-Modern.css';
+import '@@/Temml-Latin-Modern.css';
 import { mainBoot } from '@/boot/main-boot.js';
 import { subBoot } from '@/boot/sub-boot.js';
 

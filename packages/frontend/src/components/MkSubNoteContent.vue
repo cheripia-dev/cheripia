@@ -19,7 +19,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:enableEmojiMenu="!!$i"
 			:enableEmojiMenuReaction="!!$i"
 			class="_selectable"
-			:enableAnimatedMfm="enableAnimatedMfm"
+			:enableAnimatedMfm="$i ? undefined : enableAnimatedMfm"
 		/>
 		<MkA v-if="note.renoteId" :class="$style.rp" :to="`/notes/${note.renoteId}`">RN: ...</MkA>
 		<div v-if="prefer.s.showTranslateButtonInNote && $i && (!prefer.s.useAutoTranslate || (!$i.policies.canUseAutoTranslate || (prefer.s.useAutoTranslate && (isLong || note.cw != null || !showContent)))) && instance.translatorAvailable && $i.policies.canUseTranslator && note.text && isForeignLanguage" style="padding: 5px 0; color: var(--MI_THEME-accent);">
@@ -194,7 +194,7 @@ import { $i } from '@/i.js';
 import { prefer } from '@/preferences.js';
 import { miLocalStorage } from '@/local-storage.js';
 import { instance } from '@/instance.js';
-import { notePage } from '@/filters/note.js';
+import { notePage } from '@@/js/note.js';
 import { useTooltip } from '@/composables/use-tooltip.js';
 import { pleaseLogin } from '@/utility/please-login.js';
 import { showMovedDialog } from '@/utility/show-moved-dialog.js';

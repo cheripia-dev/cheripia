@@ -25,7 +25,7 @@ import { mainRouter } from '@/router.js';
 import { makeHotkey } from '@/utility/hotkey.js';
 import { addCustomEmoji, removeCustomEmojis, updateCustomEmojis } from '@/custom-emojis.js';
 import { prefer } from '@/preferences.js';
-import { updateCurrentAccountPartial } from '@/accounts.js';
+import { updateCurrentAccount } from '@/accounts.js';
 import { unisonReload } from '@/utility/unison-reload.js';
 import { isBirthday } from '@/utility/is-birthday.js';
 import { userName } from '@/filters/user.js';
@@ -338,11 +338,11 @@ export async function mainBoot() {
 
 			// 自分の情報が更新されたとき
 			main.on('meUpdated', i => {
-				updateCurrentAccountPartial(i);
+				updateCurrentAccount(i);
 			});
 
 			main.on('readAllNotifications', () => {
-				updateCurrentAccountPartial({
+				updateCurrentAccount({
 					hasUnreadNotification: false,
 					unreadNotificationsCount: 0,
 				});
@@ -350,43 +350,43 @@ export async function mainBoot() {
 
 			main.on('unreadNotification', () => {
 				const unreadNotificationsCount = ($i?.unreadNotificationsCount ?? 0) + 1;
-				updateCurrentAccountPartial({
+				updateCurrentAccount({
 					hasUnreadNotification: true,
 					unreadNotificationsCount,
 				});
 			});
 
 			main.on('unreadMention', () => {
-				updateCurrentAccountPartial({ hasUnreadMentions: true });
+				updateCurrentAccount({ hasUnreadMentions: true });
 			});
 
 			main.on('readAllUnreadMentions', () => {
-				updateCurrentAccountPartial({ hasUnreadMentions: false });
+				updateCurrentAccount({ hasUnreadMentions: false });
 			});
 
 			main.on('unreadSpecifiedNote', () => {
-				updateCurrentAccountPartial({ hasUnreadSpecifiedNotes: true });
+				updateCurrentAccount({ hasUnreadSpecifiedNotes: true });
 			});
 
 			main.on('readAllUnreadSpecifiedNotes', () => {
-				updateCurrentAccountPartial({ hasUnreadSpecifiedNotes: false });
+				updateCurrentAccount({ hasUnreadSpecifiedNotes: false });
 			});
 
 			main.on('readAllAntennas', () => {
-				updateCurrentAccountPartial({ hasUnreadAntenna: false });
+				updateCurrentAccount({ hasUnreadAntenna: false });
 			});
 
 			main.on('unreadAntenna', () => {
-				updateCurrentAccountPartial({ hasUnreadAntenna: true });
+				updateCurrentAccount({ hasUnreadAntenna: true });
 			});
 
 			main.on('newChatMessage', () => {
-				updateCurrentAccountPartial({ hasUnreadChatMessages: true });
+				updateCurrentAccount({ hasUnreadChatMessages: true });
 				sound.playMisskeySfx('chatMessage');
 			});
 
 			main.on('readAllAnnouncements', () => {
-				updateCurrentAccountPartial({ hasUnreadAnnouncement: false });
+				updateCurrentAccount({ hasUnreadAnnouncement: false });
 			});
 
 			// 個人宛てお知らせが発行されたとき
