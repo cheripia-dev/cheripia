@@ -3234,6 +3234,9 @@ _postForm:
   replyPlaceholder: "このノートに返信..."
   quotePlaceholder: "このノートを引用..."
   channelPlaceholder: "チャンネルに投稿..."
+  channelPlaceholderWithName: "{name}に投稿…"
+  channelReplyPlaceholder: "{name}に返信…"
+  channelQuotePlaceholder: "{name}に引用して投稿…"
   showHowToUse: "フォームの説明を表示"
   _howToUse:
     content_title: "本文"

@@ -34,10 +34,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<span v-if="searchableBy === 'private'"><i class="ti ti-mail-search"></i></span>
 					<span :class="$style.headerRightButtonText">{{ i18n.ts._searchbility[searchableBy] }}</span>
 				</button>
-				<button v-if="targetChannel != null" class="_button" :class="[$style.headerRightItem, $style.visibility]" disabled>
-					<span><i class="ti ti-device-tv"></i></span>
-					<span :class="$style.headerRightButtonText">{{ targetChannel.name }}</span>
-				</button>
 			</template>
 			<button ref="submitButtonEl" v-click-anime class="_button" :class="$style.submitButton" :disabled="!canPost" data-testid="post-form-submit" @click="post">
 				<div :class="$style.submitInner">
@@ -307,12 +303,17 @@ const placeholder = computed((): string => {
 	let postTo: string;
 	postTo = '[' + i18n.ts._visibility[visibility.value] + '] ';
 
-	if (renoteTargetNote.value) {
+	if (targetChannel.value) {
+		const name = targetChannel.value.name;
+		return postTo + (renoteTargetNote.value
+			? i18n.tsx._postForm.channelQuotePlaceholder({ name })
+			: replyTargetNote.value
+				? i18n.tsx._postForm.channelReplyPlaceholder({ name })
+				: i18n.tsx._postForm.channelPlaceholderWithName({ name }));
+	} else if (renoteTargetNote.value) {
 		return postTo + i18n.ts._postForm.quotePlaceholder;
 	} else if (replyTargetNote.value) {
 		return postTo + i18n.ts._postForm.replyPlaceholder;
-	} else if (targetChannel.value) {
-		return postTo + i18n.ts._postForm.channelPlaceholder;
 	} else {
 		const xs = [
 			i18n.ts._postForm._placeholders.a,
