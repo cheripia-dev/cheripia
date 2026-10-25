@@ -4,7 +4,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import * as mfm from 'mfc-js';
+import * as mfm from 'mfm-js';
 import { In } from 'typeorm';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import type { DriveFilesRepository, ChannelsRepository, UsersRepository, NotesRepository, UserNotePiningsRepository, UserProfilesRepository, MiUser } from '@/models/_.js';

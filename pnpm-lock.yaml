@@ -517,9 +517,9 @@ importers:
       meilisearch:
         specifier: 0.62.0
         version: 0.62.0
-      mfc-js:
-        specifier: git+https://github.com/cheripia-dev/mfm.js.git#d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df
-        version: https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df
+      mfm-js:
+        specifier: git+https://github.com/cheripia-dev/mfm.js.git#d6f9e13f93efd2db355c9374efe0a8e66ec7616d
+        version: https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d6f9e13f93efd2db355c9374efe0a8e66ec7616d
       mime-types:
         specifier: 3.0.2
         version: 3.0.2
@@ -930,9 +930,9 @@ importers:
       mediabunny:
         specifier: 1.61.5
         version: 1.61.5
-      mfc-js:
-        specifier: git+https://github.com/cheripia-dev/mfm.js.git#d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df
-        version: https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df
+      mfm-js:
+        specifier: git+https://github.com/cheripia-dev/mfm.js.git#d6f9e13f93efd2db355c9374efe0a8e66ec7616d
+        version: https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d6f9e13f93efd2db355c9374efe0a8e66ec7616d
       misskey-bubble-game:
         specifier: workspace:*
         version: link:../misskey-bubble-game
@@ -1262,9 +1262,9 @@ importers:
       json5:
         specifier: 2.2.3
         version: 2.2.3
-      mfc-js:
-        specifier: git+https://github.com/cheripia-dev/mfm.js.git#d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df
-        version: https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df
+      mfm-js:
+        specifier: git+https://github.com/cheripia-dev/mfm.js.git#d6f9e13f93efd2db355c9374efe0a8e66ec7616d
+        version: https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d6f9e13f93efd2db355c9374efe0a8e66ec7616d
       misskey-js:
         specifier: workspace:*
         version: link:../misskey-js
@@ -1380,9 +1380,9 @@ importers:
       json5:
         specifier: 2.2.3
         version: 2.2.3
-      mfc-js:
-        specifier: git+https://github.com/cheripia-dev/mfm.js.git#d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df
-        version: https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df
+      mfm-js:
+        specifier: git+https://github.com/cheripia-dev/mfm.js.git#d6f9e13f93efd2db355c9374efe0a8e66ec7616d
+        version: https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d6f9e13f93efd2db355c9374efe0a8e66ec7616d
       misskey-js:
         specifier: workspace:*
         version: link:../misskey-js
@@ -7032,9 +7032,9 @@ packages:
     resolution: {integrity: sha512-8q7VEgMJW4J8tcfVPy8g09NcQwZdbwFEqhe/WZkoIzjn/3TGDwtOCYtXGxA3O8tPzpczCCDgv+P2P5y00ZJOOg==}
     engines: {node: '>= 8'}
 
-  mfc-js@https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df:
-    resolution: {gitHosted: true, integrity: sha512-V4EsMSXcNh8eoB/PdV/tigbZW/xjC2eVnojgM6+wX8bqbG6CmP8cCAQEuoyWfwchPNno3HRieQ2SKeL/jfSSLQ==, tarball: https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df}
-    version: 0.3.0
+  mfm-js@https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d6f9e13f93efd2db355c9374efe0a8e66ec7616d:
+    resolution: {gitHosted: true, integrity: sha512-qpLHBUGMXiluWuHXyCEDLgSn/pEX3CYdDypSgQcWvOjSls0iU1IM5wEi/R4Yrn6TshFoCEVPaV+fnWlchW85PA==, tarball: https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d6f9e13f93efd2db355c9374efe0a8e66ec7616d}
+    version: 0.3.1
 
   micromark-core-commonmark@2.0.4:
     resolution: {integrity: sha512-wxEeE8v8XVvOrxn1TZj74qYhAtTQsSqufHVS3uNVyT1MupXxhyaHk8/9xDNPh9BmL77QNDgWTkZ3RsYHB2ry7w==}
@@ -15700,7 +15700,7 @@ snapshots:
 
   merge2@1.4.1: {}
 
-  mfc-js@https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df:
+  mfm-js@https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d6f9e13f93efd2db355c9374efe0a8e66ec7616d:
     dependencies:
       '@misskey-dev/emoji-data': 17.0.3
 

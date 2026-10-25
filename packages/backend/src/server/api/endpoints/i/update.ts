@@ -4,7 +4,7 @@
  */
 
 import RE2 from 're2';
-import * as mfm from 'mfc-js';
+import * as mfm from 'mfm-js';
 import { Inject, Injectable } from '@nestjs/common';
 import ms from 'ms';
 import * as htmlParser from 'node-html-parser';

@@ -13,7 +13,7 @@ import { normalizeTag } from '@/misc/normalize-tag.js';
 import type { IMentionedRemoteUsers } from '@/models/Note.js';
 import { bindThis } from '@/decorators.js';
 import { escapeHtml } from '@/misc/escape-html.js';
-import type * as mfm from 'mfc-js';
+import type * as mfm from 'mfm-js';
 
 const urlRegex = /^https?:\/\/[\w\/:%#@$&?!()\[\]~.,=+\-]+/;
 const urlRegexFull = /^https?:\/\/[\w\/:%#@$&?!()\[\]~.,=+\-]+$/;

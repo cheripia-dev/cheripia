@@ -12,7 +12,7 @@ import { Brackets, In, IsNull, LessThan, Not } from 'typeorm';
 import accepts from 'accepts';
 import vary from 'vary';
 import secureJson from 'secure-json-parse';
-import * as mfm from 'mfc-js';
+import * as mfm from 'mfm-js';
 import { DI } from '@/di-symbols.js';
 import type { FollowingsRepository, NotesRepository, EmojisRepository, NoteReactionsRepository, UserProfilesRepository, UserNotePiningsRepository, UsersRepository, FollowRequestsRepository, MiMeta, ClipsRepository, ClipNotesRepository, MiClipNote } from '@/models/_.js';
 import * as url from '@/misc/prelude/url.js';

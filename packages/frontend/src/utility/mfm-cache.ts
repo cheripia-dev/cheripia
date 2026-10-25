@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import * as mfm from 'mfc-js';
+import * as mfm from 'mfm-js';
 
 interface CacheEntry {
 	result: mfm.MfmNode[];
