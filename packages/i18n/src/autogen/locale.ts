@@ -12241,6 +12241,18 @@ export interface Locale extends ILocale {
          */
         "channelPlaceholder": string;
         /**
+         * {name}に投稿…
+         */
+        "channelPlaceholderWithName": ParameterizedString<"name">;
+        /**
+         * {name}に返信…
+         */
+        "channelReplyPlaceholder": ParameterizedString<"name">;
+        /**
+         * {name}に引用して投稿…
+         */
+        "channelQuotePlaceholder": ParameterizedString<"name">;
+        /**
          * フォームの説明を表示
          */
         "showHowToUse": string;

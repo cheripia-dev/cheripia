@@ -76,12 +76,6 @@ function onModalClosed() {
 .form {
 	width: 100%;
 	max-width: 520px;
-	max-height: calc(100% - env(safe-area-inset-bottom));
 	margin: 0 auto auto auto;
-	overflow: scroll;
-
-  &::-webkit-scrollbar {
-    display: none;
-  }
 }
 </style>
