@@ -1949,8 +1949,8 @@ defineExpose({
 }
 
 .preview {
-	padding: 16px 20px;
-	// min-height: 75px;
+	padding: 16px 20px 0 20px;
+	min-height: 75px;
 	max-height: 150px;
 	overflow: auto;
 	background-size: auto auto;
@@ -2201,7 +2201,7 @@ input.hashtags {
 	}
 
 	.preview {
-		padding: 16px 14px;
+		padding: 16px 14px 0 14px;
 	}
 
 	.withQuote {
