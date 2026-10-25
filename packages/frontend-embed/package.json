@@ -18,7 +18,7 @@
 		"i18n": "workspace:*",
 		"icons-subsetter": "workspace:*",
 		"json5": "2.2.3",
-		"mfc-js": "0.1.0",
+		"mfc-js": "git+https://github.com/cheripia-dev/mfm.js.git#d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df",
 		"misskey-js": "workspace:*",
 		"punycode.js": "2.3.1",
 		"temml": "0.14.0",

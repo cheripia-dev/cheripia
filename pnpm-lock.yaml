@@ -518,8 +518,8 @@ importers:
         specifier: 0.62.0
         version: 0.62.0
       mfc-js:
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: git+https://github.com/cheripia-dev/mfm.js.git#d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df
+        version: https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df
       mime-types:
         specifier: 3.0.2
         version: 3.0.2
@@ -931,8 +931,8 @@ importers:
         specifier: 1.61.5
         version: 1.61.5
       mfc-js:
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: git+https://github.com/cheripia-dev/mfm.js.git#d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df
+        version: https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df
       misskey-bubble-game:
         specifier: workspace:*
         version: link:../misskey-bubble-game
@@ -1263,8 +1263,8 @@ importers:
         specifier: 2.2.3
         version: 2.2.3
       mfc-js:
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: git+https://github.com/cheripia-dev/mfm.js.git#d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df
+        version: https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df
       misskey-js:
         specifier: workspace:*
         version: link:../misskey-js
@@ -1381,8 +1381,8 @@ importers:
         specifier: 2.2.3
         version: 2.2.3
       mfc-js:
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: git+https://github.com/cheripia-dev/mfm.js.git#d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df
+        version: https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df
       misskey-js:
         specifier: workspace:*
         version: link:../misskey-js
@@ -4226,9 +4226,6 @@ packages:
     resolution: {integrity: sha512-JSSdNiS0wgd8GHhBwnMAI18Y8XPhLVN+dNelPfZCXFhy9Lb3NbnFyp9JKxxr54jSUkEJPk3cidvCoHducSaRMQ==}
     engines: {node: '>=14.17'}
 
-  '@twemoji/parser@17.0.0':
-    resolution: {integrity: sha512-UsFCnivUCUq/UHJhfM3bd3L35VerCi76jYwT5nFNHUnESDKefNav0z2l0jdoFVbcq72n3llr6AQrOlcrStPE1Q==}
-
   '@tybys/wasm-util@0.10.4':
     resolution: {integrity: sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A==}
 
@@ -7035,8 +7032,9 @@ packages:
     resolution: {integrity: sha512-8q7VEgMJW4J8tcfVPy8g09NcQwZdbwFEqhe/WZkoIzjn/3TGDwtOCYtXGxA3O8tPzpczCCDgv+P2P5y00ZJOOg==}
     engines: {node: '>= 8'}
 
-  mfc-js@0.1.0:
-    resolution: {integrity: sha512-ibcX5cJfObLB6fcKHQuX8fbBArZJCzMXTZN5NJ3dkf2UZSy1mEtosPRI61P+4KHEGISyqBQg4lsK1W7LeVRaNQ==}
+  mfc-js@https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df:
+    resolution: {gitHosted: true, integrity: sha512-V4EsMSXcNh8eoB/PdV/tigbZW/xjC2eVnojgM6+wX8bqbG6CmP8cCAQEuoyWfwchPNno3HRieQ2SKeL/jfSSLQ==, tarball: https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df}
+    version: 0.3.0
 
   micromark-core-commonmark@2.0.4:
     resolution: {integrity: sha512-wxEeE8v8XVvOrxn1TZj74qYhAtTQsSqufHVS3uNVyT1MupXxhyaHk8/9xDNPh9BmL77QNDgWTkZ3RsYHB2ry7w==}
@@ -12068,8 +12066,6 @@ snapshots:
 
   '@tsd/typescript@5.9.3': {}
 
-  '@twemoji/parser@17.0.0': {}
-
   '@tybys/wasm-util@0.10.4':
     dependencies:
       tslib: 2.8.1
@@ -15704,9 +15700,9 @@ snapshots:
 
   merge2@1.4.1: {}
 
-  mfc-js@0.1.0:
+  mfc-js@https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df:
     dependencies:
-      '@twemoji/parser': 17.0.0
+      '@misskey-dev/emoji-data': 17.0.3
 
   micromark-core-commonmark@2.0.4:
     dependencies:
