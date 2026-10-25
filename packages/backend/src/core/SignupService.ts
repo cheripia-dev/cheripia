@@ -4,7 +4,7 @@
  */
 
 import { generateKeyPair, randomUUID } from 'node:crypto';
-import * as mfm from 'mfc-js';
+import * as mfm from 'mfm-js';
 import { Inject, Injectable } from '@nestjs/common';
 //import bcrypt from 'bcryptjs';
 import * as argon2 from 'argon2';

@@ -4,7 +4,7 @@
  */
 
 import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
-import * as mfm from 'mfc-js';
+import * as mfm from 'mfm-js';
 import * as Redis from 'ioredis';
 import { Brackets, In } from 'typeorm';
 import { DI } from '@/di-symbols.js';

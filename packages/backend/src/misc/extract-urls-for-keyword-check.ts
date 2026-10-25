@@ -4,7 +4,7 @@
  */
 
 import { domainToUnicode } from 'node:url';
-import * as mfm from 'mfc-js';
+import * as mfm from 'mfm-js';
 import { DB_MAX_NOTE_TEXT_LENGTH } from '@/const.js';
 import { safeDecodeURIComponent } from '@/misc/safe-decode-uri-component.js';
 
