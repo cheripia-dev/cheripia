@@ -149,6 +149,15 @@ export class FileServerProxyHandler {
 			badge: 'badge' in query,
 		};
 
+		// preview は先頭フレームのみの静止画を返す従来動作を保つ。
+		// napi では static プリセットが preview より優先されて寸法が変わるため、
+		// 従来の 200x200 収まるサイズを明示する。
+		if (options.preview) {
+			options.static = true;
+			options.width = 200;
+			options.height = 200;
+		}
+
 		const requiresImageConversion = options.emoji || options.avatar || options.static || options.preview || options.badge;
 
 		if (!requiresImageConversion && file.mime !== 'image/svg+xml') {

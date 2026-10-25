@@ -99,6 +99,19 @@ describe('Media processing', () => {
 	}
 
 	for (const name of ['anime.gif', 'anime.webp', 'animated.jxl']) {
+		test(`HTTP proxy preview is static: ${name}`, async () => {
+			const url = `http://misskey.local/proxy/review?url=${encodeURIComponent(files[name].url)}&preview=1&origin=1`;
+			const image = await inspect(url);
+			assert.equal(image.status, 200);
+			assert.equal(image.type, 'image/webp');
+			assert.ok(image.metadata);
+			assert.equal(image.metadata.pages ?? 1, 1, JSON.stringify(image.metadata));
+			assert.ok(image.metadata.width! <= 200, JSON.stringify(image.metadata));
+			assert.ok((image.metadata.pageHeight ?? image.metadata.height)! <= 200, JSON.stringify(image.metadata));
+		});
+	}
+
+	for (const name of ['anime.gif', 'anime.webp', 'animated.jxl']) {
 		test(`animated thumbnail retained: ${name}`, async () => {
 			assert.ok(files[name].thumbnailUrl);
 			const image = await inspect(files[name].thumbnailUrl!);
