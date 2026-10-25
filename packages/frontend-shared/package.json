@@ -27,7 +27,7 @@
 		"@misskey-dev/emoji-data": "17.0.3",
 		"i18n": "workspace:*",
 		"json5": "2.2.3",
-		"mfc-js": "0.1.0",
+		"mfc-js": "git+https://github.com/cheripia-dev/mfm.js.git#d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df",
 		"misskey-js": "workspace:*",
 		"punycode.js": "2.3.1",
 		"shiki": "4.5.0",

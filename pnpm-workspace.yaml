@@ -23,6 +23,8 @@ allowBuilds:
   canvas: true
   core-js: true
   esbuild: true
+  # Git dependency needs prepare to generate built/; trust only this pinned revision.
+  mfc-js@https://codeload.github.com/cheripia-dev/mfm.js/tar.gz/d67d50f14412bf1cd0e3210f2bfe6db3ae2bf9df: true
   msgpackr-extract: true
   msw: true
   nice-napi: true
