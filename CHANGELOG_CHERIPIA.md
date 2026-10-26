@@ -1,3 +1,28 @@
+## 1.13.0
+Cherrypick 4.17.0  
+Misskey 2026.10.1
+
+### Release Date
+2026-10-26
+
+### General
+- Misskey 2026.10.1 のマージ [#9](https://github.com/cheripia-dev/cheripia/pull/9)
+- Change: Cheripia へリブランド [#1](https://github.com/cheripia-dev/cheripia/pull/1)
+- Change: 内蔵メディアプロキシをmedia-proxy-rsに変更 [#5](https://github.com/cheripia-dev/cheripia/pull/5)
+
+### Client
+- Fix: 投稿フォームのレイアウトを修正 [#15](https://github.com/cheripia-dev/cheripia/pull/15)
+- Enhance: MkUserSelectDialogのusernameとhost入力を統合 [#16](https://github.com/cheripia-dev/cheripia/pull/16)
+
+### Server
+- Fix: セキュリティに関する修正
+- Enhance: メディアプロキシURLの付与をDB保存時からpack時に変更 [#2](https://github.com/cheripia-dev/cheripia/pull/2)
+- Enhance: 管理画面のAPIレスポンスにシークレットキーを含めないように [#3](https://github.com/cheripia-dev/cheripia/pull/3)
+- Fix: チャンネル画像の複製失敗をエラーとして返す [#7](https://github.com/cheripia-dev/cheripia/pull/7)
+
+### Others
+- Change: mfc-jsへの依存をmfm-jsへ統一 [#17](https://github.com/cheripia-dev/cheripia/pull/17)
+
 ## 1.12.0
 Cherrypick 4.17.0  
 Misskey 2026.10.0
