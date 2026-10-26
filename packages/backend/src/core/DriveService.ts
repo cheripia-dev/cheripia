@@ -7,11 +7,10 @@ import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import { Inject, Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import sharp from 'sharp';
-import type { Sharp } from 'sharp';
 import { sharpBmp } from '@misskey-dev/sharp-read-bmp';
 import { In, IsNull, Not } from 'typeorm';
 import { DeleteObjectCommandInput, PutObjectCommandInput, CopyObjectCommandInput } from '@aws-sdk/client-s3';
+import { Metadata as SharpMetadata } from 'sharp';
 import { DI } from '@/di-symbols.js';
 import type { DriveFilesRepository, UsersRepository, DriveFoldersRepository, UserProfilesRepository, MiMeta } from '@/models/_.js';
 import type { Config } from '@/config.js';
@@ -42,7 +41,6 @@ import { FileInfoService } from '@/core/FileInfoService.js';
 import { bindThis } from '@/decorators.js';
 import { RoleService } from '@/core/RoleService.js';
 import { correctFilename } from '@/misc/correct-filename.js';
-import { isMimeImage } from '@/misc/is-mime-image.js';
 import { ModerationLogService } from '@/core/ModerationLogService.js';
 import { UtilityService } from '@/core/UtilityService.js';
 import { RegistryApiService } from '@/core/RegistryApiService.js';
@@ -88,6 +86,12 @@ type UploadFromUrlArgs = {
 	requestIp?: string | null;
 	requestHeaders?: Record<string, string> | null;
 };
+
+const LOSSLESS_WEBPUBLIC_MIME_TYPES = new Set([
+	'image/png',
+	'image/bmp',
+	'image/svg+xml',
+]);
 
 @Injectable()
 export class DriveService {
@@ -465,22 +469,32 @@ export class DriveService {
 			}
 		}
 
-		if (!isMimeImage(type, 'sharp-convertible-image-with-bmp')) {
-			this.registerLogger.debug('web image and thumbnail not created (cannot convert by sharp)');
+		if (!type.startsWith('image/')) {
+			this.registerLogger.debug('web image and thumbnail not created (not an image)');
 			return {
 				webpublic: null,
 				thumbnail: null,
 			};
 		}
 
-		let img: Sharp | null = null;
-		let satisfyWebpublic: boolean;
-		let isAnimated: boolean;
-		let width: number;
-		let height: number;
+		let src: Buffer;
 		try {
-			img = await sharpBmp(path, type);
-			const metadata = await img.metadata();
+			src = await fs.promises.readFile(path);
+		} catch (err) {
+			this.registerLogger.warn('web image and thumbnail not created (failed to read file)', err as Error);
+			return {
+				webpublic: null,
+				thumbnail: null,
+			};
+		}
+
+		let satisfyWebpublic: boolean;
+		let isAnimated: boolean | undefined;
+		let metadata = null as SharpMetadata | null;
+		try {
+			//FIXME: メタデータ取得試行->napiで画像変換->変換後のメタデータ取得で最大3回の画像デコードが発生する
+			const img = await sharpBmp(path, type);
+			metadata = await img.metadata();
 			isAnimated = !!(metadata.pages && metadata.pages > 1);
 
 			satisfyWebpublic = !!(
@@ -490,14 +504,8 @@ export class DriveService {
 			metadata.width && metadata.width <= 2048 &&
 			metadata.height && metadata.height <= 2048
 			);
-			width = Number(metadata.width);
-			height = Number(metadata.height);
-		} catch (err) {
-			this.registerLogger.warn(`sharp failed: ${err}`);
-			return {
-				webpublic: null,
-				thumbnail: null,
-			};
+		} catch (_) {
+			satisfyWebpublic = false; //sharpBmpが対応しない形式はおそらくWebpublicに適さない
 		}
 
 		// #region webpublic
@@ -507,38 +515,20 @@ export class DriveService {
 			this.registerLogger.info('creating web image');
 
 			try {
-				if (userId == null) {
-					width = 2048;
-					height = 2048;
-				} else {
-					const compressMode = await this.registryApiService.getItem(userId, null, ['client', 'base'], 'imageCompressionMode');
-					this.registerLogger.debug(compressMode?.value);
-					switch (compressMode?.value) {
-						case 'resizeCompress':
-							width = 2048;
-							height = 2048;
-							break;
-						case 'noResizeCompress':
-							break;
-						case 'resizeCompressLossy':
-							width = 2048;
-							height = 2048;
-							break;
-						case 'noResizeCompressLossy':
-							break;
-						default:
-							this.registerLogger.debug('undefined CompressMode');
-							width = 2048;
-							height = 2048;
-							break;
-					}
-				}
-				if (['image/jpeg', 'image/webp', 'image/avif'].includes(type)) {
-					webpublic = await this.imageProcessingService.convertSharpToWebp(img, width, height);
-				} else if (['image/png', 'image/bmp', 'image/svg+xml'].includes(type)) {
-					webpublic = await this.imageProcessingService.convertSharpToPng(img, width, height);
-				} else {
-					this.registerLogger.debug('web image not created (not an required image)');
+				const compressMode = userId == null
+					? null
+					: await this.registryApiService.getItem(userId, null, ['client', 'base'], 'imageCompressionMode');
+				this.registerLogger.debug(compressMode?.value);
+				const noResize = compressMode?.value === 'noResizeCompress' || compressMode?.value === 'noResizeCompressLossy';
+				const lossless = LOSSLESS_WEBPUBLIC_MIME_TYPES.has(type);
+				webpublic = noResize
+					? await this.imageProcessingService.processWithoutResize(src, { lossless, contentType: type })
+					: await this.imageProcessingService.process(src, { lossless, contentType: type });
+				if (metadata === null) {
+					//metadataが直接取得できない形式ならwebp変換後のwebpublicをベースにアニメーション有無を取得する
+					const img = await sharpBmp(webpublic.data, type);
+					metadata = await img.metadata();
+					isAnimated = !!(metadata.pages && metadata.pages > 1);
 				}
 			} catch (err) {
 				this.registerLogger.warn('web image not created (an error occurred)', err as Error);
@@ -554,11 +544,9 @@ export class DriveService {
 		let thumbnail: IImage | null = null;
 
 		try {
-			if (isAnimated) {
-				thumbnail = await this.imageProcessingService.convertSharpToWebp(sharp(path, { animated: true }), 374, 317, { alphaQuality: 70 });
-			} else {
-				thumbnail = await this.imageProcessingService.convertSharpToWebp(img, 498, 422);
-			}
+			thumbnail = isAnimated
+				? await this.imageProcessingService.process(src, { width: 374, height: 317, webpQuality: 80, contentType: type })
+				: await this.imageProcessingService.process(src, { static: true, width: 498, height: 422, contentType: type });
 		} catch (err) {
 			this.registerLogger.warn('thumbnail not created (an error occurred)', err as Error);
 		}

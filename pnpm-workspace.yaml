@@ -42,6 +42,7 @@ minimumReleaseAge: 10080 # delay 7days to mitigate supply-chain attack
 minimumReleaseAgeExclude:
   - '@misskey-dev/*'
   - '@syuilo/aiscript'
+  - '@cheripia-dev/media-proxy-napi*'
   - buraha
   - slacc
   - slacc-android-arm-eabi

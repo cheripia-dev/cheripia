@@ -94,6 +94,7 @@ export default defineConfig((args) => {
 		// Misskeyはどちらも使わないためインストールしていない
 		/^@nestjs\/(?:microservices|websockets)(?:\/.*)?$/,
 		/^@napi-rs\/.*/,
+		/^@cheripia-dev\/media-proxy-napi.*/,
 		'mock-aws-s3',
 		'aws-sdk',
 		'nock',
