@@ -50,7 +50,7 @@ export class HomeTimelineChannel extends Channel {
 	private async onNote(note: Packed<'Note'>) {
 		if (note.channelId) {
 			// cheripia: 「フォローしているユーザーのチャンネル投稿をTLに含める」設定に応じて、フォローしていないチャンネルの投稿を通すかどうかを決める
-			if (!isChannelPostAllowedForMe(note, this.user!, this.followingChannels, this.following)) return;
+			if (!isChannelPostAllowedForMe(note, this.user!.id, this.userProfile!.includeChannelPostsInTimeline, this.followingChannels, this.following)) return;
 			if (note.user.channelId != null) {
 				// cheripia: チャンネルアカウントによる純粋なリノートの場合
 				if ( isRenotePacked(note) && !isQuotePacked(note) && note.renote) {

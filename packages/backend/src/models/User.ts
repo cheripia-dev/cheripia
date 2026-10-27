@@ -341,16 +341,6 @@ export class MiUser {
 	})
 	public canChat: boolean | null;
 
-	/**
-	 * フォローしているユーザーのチャンネル投稿をホームタイムラインにも流すかどうか。
-	 * チャンネルそのものをフォローしている場合の挙動には影響しない。
-	 */
-	@Column('boolean', {
-		default: false,
-		comment: 'Whether to include channel posts of followed users in the home timeline.',
-	})
-	public includeChannelPostsInTimeline: boolean;
-
 	constructor(data: Partial<MiUser>) {
 		if (data == null) return;
 

@@ -91,7 +91,6 @@ export default class Connection {
 	public async fetch() {
 		if (this.user == null) return;
 		const [
-			freshUser,
 			userProfile,
 			following,
 			followingChannels,
@@ -100,7 +99,6 @@ export default class Connection {
 			userIdsWhoBlockingMe,
 			userIdsWhoMeMutingRenotes,
 		] = await Promise.all([
-			this.cacheService.findUserById(this.user.id),
 			this.cacheService.userProfileCache.fetch(this.user.id),
 			this.cacheService.userFollowingsCache.fetch(this.user.id),
 			this.channelFollowingService.userFollowingChannelsCache.fetch(this.user.id),
@@ -109,8 +107,6 @@ export default class Connection {
 			this.cacheService.userBlockedCache.fetch(this.user.id),
 			this.cacheService.renoteMutingsCache.fetch(this.user.id),
 		]);
-		// cheripia: タイムラインの絞り込みがユーザー設定（includeChannelPostsInTimeline 等）を参照するため、再接続を待たずに反映させたい
-		if (freshUser != null) this.user = freshUser;
 		this.userProfile = userProfile;
 		this.following = following;
 		this.followingChannels = followingChannels;

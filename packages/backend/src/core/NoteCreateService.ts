@@ -1217,11 +1217,11 @@ export class NoteCreateService implements OnApplicationShutdown {
 			// （投稿者がチャンネルアカウントの場合は上でプッシュ済みなのでスキップ）
 			if (note.channel.actorId !== user.id) {
 				const recipients = await this.followingsRepository.createQueryBuilder('following')
-					.innerJoin('user', 'follower', 'follower.id = following."followerId"')
+					.innerJoin('user_profile', 'followerprofile', 'followerprofile."userId" = following."followerId"')
 					.where('following."followeeId" = :followeeId', { followeeId: user.id })
 					.andWhere('following."followerHost" IS NULL')
 					.andWhere('following."isFollowerHibernated" = :isFollowerHibernated', { isFollowerHibernated: false })
-					.andWhere('follower."includeChannelPostsInTimeline" = :includeChannelPostsInTimeline', { includeChannelPostsInTimeline: true })
+					.andWhere('followerprofile."includeChannelPostsInTimeline" = :includeChannelPostsInTimeline', { includeChannelPostsInTimeline: true })
 					.select('following."followerId"', 'followerId')
 					.addSelect('following."withReplies"', 'withReplies')
 					.getRawMany<{ followerId: string, withReplies: boolean }>();

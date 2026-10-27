@@ -264,6 +264,16 @@ export class MiUserProfile {
 	})
 	public mutedInstances: string[];
 
+	/**
+	 * フォローしているユーザーのチャンネル投稿をホームタイムラインにも流すかどうか。
+	 * チャンネルそのものをフォローしている場合の挙動には影響しない。
+	 */
+	@Column('boolean', {
+		default: false,
+		comment: 'Whether to include channel posts of followed users in the home timeline.',
+	})
+	public includeChannelPostsInTimeline: boolean;
+
 	@Column('jsonb', {
 		default: {},
 	})

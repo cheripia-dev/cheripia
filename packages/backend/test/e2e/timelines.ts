@@ -851,6 +851,23 @@ describe('Timelines', () => {
 					}, waitForPushToTlOptions);
 				});
 
+				test('ユーザーフォロー　＋　チャンネル投稿を含める設定　＋　自分のチャンネル投稿　＝　TLに流れる', async () => {
+					// DB取得経路で channelPostsOf のパラメータ上書きにより自分の投稿が落ちる回帰対策
+					const [alice, bob] = await Promise.all([signup(), signup()]);
+					await api('following/create', { userId: bob.id }, alice);
+					await api('i/update', { includeChannelPostsInTimeline: true }, alice);
+
+					const channel = await createChannel('channel', bob);
+
+					const aliceNote = await post(alice, { text: 'my channel post', channelId: channel.id });
+
+					await vi.waitFor(async () => {
+						const res = await api('notes/timeline', { limit: 100 }, alice);
+
+						assert.strictEqual(res.body.some((note: any) => note.id === aliceNote.id), true);
+					}, waitForPushToTlOptions);
+				});
+
 				test('チャンネルフォローのみ　＋　ミュートしているチャンネルへの自分のチャンネル投稿はTLに流れない', async () => {
 					const [alice, bob] = await Promise.all([signup(), signup()]);
 

@@ -11,18 +11,20 @@ import { Brackets } from 'typeorm';
  * （REST の noteFilter とストリーム両方で共有する。REST 側は設定を切った後に Redis へ残っている古いチャンネル投稿の除外もここで行う）
  *
  * @param note 確認対象のノート
- * @param me タイムラインの閲覧者
+ * @param meId タイムラインの閲覧者ID
+ * @param includeChannelPostsInTimeline 閲覧者の「フォローしているユーザーのチャンネル投稿をTLに含める」設定
  * @param followingChannels 閲覧者がフォローしているチャンネルIDの集合
  * @param followings 閲覧者がフォローしているユーザーの一覧（キーがユーザーID）
  */
 export function isChannelPostAllowedForMe(
 	note: { userId: string, channelId?: string | null },
-	me: { id: string, includeChannelPostsInTimeline: boolean },
+	meId: string,
+	includeChannelPostsInTimeline: boolean,
 	followingChannels: Set<string>,
 	followings: Record<string, unknown>,
 ): boolean {
 	if (note.channelId != null && !followingChannels.has(note.channelId)) {
-		if (note.userId !== me.id && !(me.includeChannelPostsInTimeline && Object.hasOwn(followings, note.userId))) return false;
+		if (note.userId !== meId && !(includeChannelPostsInTimeline && Object.hasOwn(followings, note.userId))) return false;
 	}
 	return true;
 }

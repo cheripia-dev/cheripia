@@ -83,6 +83,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			const untilId = ps.untilId ?? (ps.untilDate ? this.idService.gen(ps.untilDate!) : null);
 			const sinceId = ps.sinceId ?? (ps.sinceDate ? this.idService.gen(ps.sinceDate!) : null);
 
+			const profile = await this.cacheService.userProfileCache.fetch(me.id);
+
 			if (!this.serverSettings.enableFanoutTimeline) {
 				const timeline = await this.getFromDb({
 					untilId,
@@ -95,7 +97,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					withRenotes: ps.withRenotes,
 					withCats: ps.withCats,
 					withBots: ps.withBots,
-					includeChannelPosts: me.includeChannelPostsInTimeline,
+					includeChannelPosts: profile.includeChannelPostsInTimeline,
 				}, me);
 
 				process.nextTick(() => {
@@ -128,7 +130,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				noteFilter: note => {
 					// cheripia: 「フォローしているユーザーのチャンネル投稿をTLに含める」設定に応じて、Redisに混入したチャンネル投稿を通すかどうかを決める
 					// （設定を切った後にRedisへ残っている古いチャンネル投稿を除外するためにも必要）
-					if (!isChannelPostAllowedForMe(note, me, followingChannels, followings)) return false;
+					if (!isChannelPostAllowedForMe(note, me.id, profile.includeChannelPostsInTimeline, followingChannels, followings)) return false;
 
 					if (note.reply && note.reply.visibility === 'followers') {
 						if (!Object.hasOwn(followings, note.reply.userId) && note.reply.userId !== me.id) return false;
@@ -147,7 +149,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					withRenotes: ps.withRenotes,
 					withCats: ps.withCats,
 					withBots: ps.withBots,
-					includeChannelPosts: me.includeChannelPostsInTimeline,
+					includeChannelPosts: profile.includeChannelPostsInTimeline,
 				}, me),
 			});
 
@@ -191,11 +193,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 							.andWhere('note.channelId IS NULL');
 					}))
 					.orWhere('note.channelId IN (:...followingChannelIds)', { followingChannelIds });
-				qb.orWhere(channelPostsOf([me.id], mutingChannelIds));
 				// cheripia: 「フォローしているユーザーのチャンネル投稿をTLに含める」設定
-				if (ps.includeChannelPosts) {
-					qb.orWhere(channelPostsOf(followeeIds, mutingChannelIds));
-				}
+				// （同一クエリ内で channelPostsOf を2回呼ぶと userIds パラメータが共有され上書きされるため、1回に統合する）
+				qb.orWhere(channelPostsOf(ps.includeChannelPosts ? [me.id, ...followeeIds] : [me.id], mutingChannelIds));
 			}));
 		} else if (followeeIds.length > 0) {
 			// ユーザーフォローのみ（チャンネルフォローなし）
@@ -211,11 +211,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 						}));
 					}
 				}));
-				qb.orWhere(channelPostsOf([me.id], mutingChannelIds));
 				// cheripia: 「フォローしているユーザーのチャンネル投稿をTLに含める」設定
-				if (ps.includeChannelPosts) {
-					qb.orWhere(channelPostsOf(followeeIds, mutingChannelIds));
-				}
+				// （同一クエリ内で channelPostsOf を2回呼ぶと userIds パラメータが共有され上書きされるため、1回に統合する）
+				qb.orWhere(channelPostsOf(ps.includeChannelPosts ? [me.id, ...followeeIds] : [me.id], mutingChannelIds));
 			}));
 		} else if (followingChannelIds.length > 0) {
 			// チャンネルフォローのみ（ユーザーフォローなし）
