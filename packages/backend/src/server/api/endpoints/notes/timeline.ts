@@ -18,6 +18,7 @@ import { MiLocalUser } from '@/models/User.js';
 import { FanoutTimelineEndpointService } from '@/core/FanoutTimelineEndpointService.js';
 import { ChannelMutingService } from '@/core/ChannelMutingService.js';
 import { ChannelFollowingService } from '@/core/ChannelFollowingService.js';
+import { channelPostsOf, isChannelPostAllowedForMe, myPostsExcludingMutedChannels } from '@/misc/channel-timeline-filter.js';
 
 export const meta = {
 	tags: ['notes'],
@@ -94,6 +95,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					withRenotes: ps.withRenotes,
 					withCats: ps.withCats,
 					withBots: ps.withBots,
+					includeChannelPosts: me.includeChannelPostsInTimeline,
 				}, me);
 
 				process.nextTick(() => {
@@ -105,8 +107,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			const [
 				followings,
+				followingChannels,
 			] = await Promise.all([
 				this.cacheService.userFollowingsCache.fetch(me.id),
+				this.channelFollowingService.userFollowingChannelsCache.fetch(me.id),
 			]);
 
 			const timeline = this.fanoutTimelineEndpointService.timeline({
@@ -122,6 +126,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				withCats: ps.withCats,
 				withBots: ps.withBots,
 				noteFilter: note => {
+					// cheripia: 「フォローしているユーザーのチャンネル投稿をTLに含める」設定に応じて、Redisに混入したチャンネル投稿を通すかどうかを決める
+					// （設定を切った後にRedisへ残っている古いチャンネル投稿を除外するためにも必要）
+					if (!isChannelPostAllowedForMe(note, me, followingChannels, followings)) return false;
+
 					if (note.reply && note.reply.visibility === 'followers') {
 						if (!Object.hasOwn(followings, note.reply.userId) && note.reply.userId !== me.id) return false;
 					}
@@ -139,6 +147,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					withRenotes: ps.withRenotes,
 					withCats: ps.withCats,
 					withBots: ps.withBots,
+					includeChannelPosts: me.includeChannelPostsInTimeline,
 				}, me),
 			});
 
@@ -150,7 +159,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		});
 	}
 
-	private async getFromDb(ps: { untilId: string | null; sinceId: string | null; limit: number; includeMyRenotes: boolean; includeRenotedMyNotes: boolean; includeLocalRenotes: boolean; withFiles: boolean; withRenotes: boolean; withCats: boolean; withBots: boolean; }, me: MiLocalUser) {
+	private async getFromDb(ps: { untilId: string | null; sinceId: string | null; limit: number; includeMyRenotes: boolean; includeRenotedMyNotes: boolean; includeLocalRenotes: boolean; withFiles: boolean; withRenotes: boolean; withCats: boolean; withBots: boolean; includeChannelPosts: boolean; }, me: MiLocalUser) {
 		const mutingChannelIds = await this.channelMutingService
 			.list({ requestUserId: me.id }, { idOnly: true })
 			.then(x => x.map(x => x.id));
@@ -161,6 +170,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			.getMany();
 		const followeeIds = followeesHasChannels.filter(x => x.followee?.channelId == null).map(f => f.followeeId);
 		const followingChannelIds = followeesHasChannels.map(x => x.followee?.channelId).filter(x => x != null).filter(x => !mutingChannelIds.includes(x));
+		const meOrFolloweeIds = [me.id, ...followeeIds];
 
 		//#region Construct query
 		const query = this.queryService.makePaginationQuery(this.notesRepository.createQueryBuilder('note'), ps.sinceId, ps.untilId)
@@ -173,7 +183,6 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 		if (followeeIds.length > 0 && followingChannelIds.length > 0) {
 			// ユーザー・チャンネルともにフォローあり
-			const meOrFolloweeIds = [me.id, ...followeeIds];
 			query.andWhere(new Brackets(qb => {
 				qb
 					.where(new Brackets(qb2 => {
@@ -182,39 +191,43 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 							.andWhere('note.channelId IS NULL');
 					}))
 					.orWhere('note.channelId IN (:...followingChannelIds)', { followingChannelIds });
+				qb.orWhere(channelPostsOf([me.id], mutingChannelIds));
+				// cheripia: 「フォローしているユーザーのチャンネル投稿をTLに含める」設定
+				if (ps.includeChannelPosts) {
+					qb.orWhere(channelPostsOf(followeeIds, mutingChannelIds));
+				}
 			}));
 		} else if (followeeIds.length > 0) {
 			// ユーザーフォローのみ（チャンネルフォローなし）
-			const meOrFolloweeIds = [me.id, ...followeeIds];
 			query.andWhere(new Brackets(qb => {
-				qb
-					.andWhere('note.channelId IS NULL')
-					.andWhere('note.userId IN (:...meOrFolloweeIds)', { meOrFolloweeIds: meOrFolloweeIds });
-				if (mutingChannelIds.length > 0) {
-					qb.andWhere(new Brackets(qb2 => {
-						qb2.orWhere('note.renoteChannelId IS NULL');
-						qb2.orWhere('note.renoteChannelId NOT IN (:...mutingChannelIds)', { mutingChannelIds });
-					}));
+				qb.where(new Brackets(qb2 => {
+					qb2
+						.andWhere('note.channelId IS NULL')
+						.andWhere('note.userId IN (:...meOrFolloweeIds)', { meOrFolloweeIds: meOrFolloweeIds });
+					if (mutingChannelIds.length > 0) {
+						qb2.andWhere(new Brackets(qb3 => {
+							qb3.orWhere('note.renoteChannelId IS NULL');
+							qb3.orWhere('note.renoteChannelId NOT IN (:...mutingChannelIds)', { mutingChannelIds });
+						}));
+					}
+				}));
+				qb.orWhere(channelPostsOf([me.id], mutingChannelIds));
+				// cheripia: 「フォローしているユーザーのチャンネル投稿をTLに含める」設定
+				if (ps.includeChannelPosts) {
+					qb.orWhere(channelPostsOf(followeeIds, mutingChannelIds));
 				}
 			}));
 		} else if (followingChannelIds.length > 0) {
 			// チャンネルフォローのみ（ユーザーフォローなし）
 			query.andWhere(new Brackets(qb => {
 				qb
-					// renoteChannelIdは見る必要が無い
-					// ・HTLに流れてくるチャンネル＝フォローしているチャンネル
-					// ・HTLにフォロー外のチャンネルが流れるのは、フォローしているユーザがそのチャンネル投稿をリノートした場合のみ
-					// つまり、ユーザフォローしてない前提のこのブロックでは見る必要が無い
 					.where('note.channelId IN (:...followingChannelIds)', { followingChannelIds })
-					.orWhere('note.userId = :meId', { meId: me.id });
+					// cheripia: 自分の投稿は設定に関係なく常時含めるが、ミュート済みチャンネル（リノート含む）は除く（フォローなし分岐と揃える）
+					.orWhere(myPostsExcludingMutedChannels(me.id, mutingChannelIds));
 			}));
 		} else {
-			// フォローなし
-			query.andWhere(new Brackets(qb => {
-				qb
-					.andWhere('note.channelId IS NULL')
-					.andWhere('note.userId = :meId', { meId: me.id });
-			}));
+			// フォローなし（自分のチャンネル投稿は設定に関係なく常時含める。ミュート済みチャンネルは除く）
+			query.andWhere(myPostsExcludingMutedChannels(me.id, mutingChannelIds));
 		}
 
 		query.andWhere(new Brackets(qb => {

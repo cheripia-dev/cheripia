@@ -3315,6 +3315,8 @@ _timelines:
   global: "グローバル"
   media: "メディア"
   bubble: "バブル"
+  includeChannelPostsInTimeline: "フォローしているユーザーのチャンネル投稿をホームタイムラインに含める"
+  includeChannelPostsInTimelineDescription: "この設定を有効にすると、フォローしているユーザーがチャンネルに投稿したノートが、そのチャンネルをフォローしていなくてもホームタイムラインに流れるようになります。自分のチャンネル投稿はこの設定に関係なくホームタイムラインに流れます。"
 
 _play:
   new: "Playの作成"

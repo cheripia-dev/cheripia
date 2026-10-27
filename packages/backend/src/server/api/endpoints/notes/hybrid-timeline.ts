@@ -20,6 +20,7 @@ import { MiLocalUser } from '@/models/User.js';
 import { FanoutTimelineEndpointService } from '@/core/FanoutTimelineEndpointService.js';
 import { ChannelMutingService } from '@/core/ChannelMutingService.js';
 import { ChannelFollowingService } from '@/core/ChannelFollowingService.js';
+import { channelPostsOf, isChannelPostAllowedForMe } from '@/misc/channel-timeline-filter.js';
 import { ApiError } from '../../error.js';
 
 export const meta = {
@@ -120,6 +121,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					withReplies: ps.withReplies,
 					withCats: ps.withCats,
 					withBots: ps.withBots,
+					includeChannelPosts: me.includeChannelPostsInTimeline,
 				}, me);
 
 				process.nextTick(() => {
@@ -152,8 +154,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			const [
 				followings,
+				followingChannels,
 			] = await Promise.all([
 				this.cacheService.userFollowingsCache.fetch(me.id),
+				this.channelFollowingService.userFollowingChannelsCache.fetch(me.id),
 			]);
 
 			const redisTimeline = await this.fanoutTimelineEndpointService.timeline({
@@ -169,6 +173,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				withCats: ps.withCats,
 				withBots: ps.withBots,
 				noteFilter: note => {
+					// cheripia: 「フォローしているユーザーのチャンネル投稿をTLに含める」設定に応じて、Redisに混入したチャンネル投稿を通すかどうかを決める
+					// （設定を切った後にRedisへ残っている古いチャンネル投稿を除外するためにも必要）
+					if (!isChannelPostAllowedForMe(note, me, followingChannels, followings)) return false;
+
 					if (note.reply && note.reply.visibility === 'followers') {
 						if (!Object.hasOwn(followings, note.reply.userId) && note.reply.userId !== me.id) return false;
 					}
@@ -186,6 +194,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 					withReplies: ps.withReplies,
 					withCats: ps.withCats,
 					withBots: ps.withBots,
+					includeChannelPosts: me.includeChannelPostsInTimeline,
 				}, me),
 			});
 
@@ -208,6 +217,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		withReplies: boolean,
 		withCats: boolean,
 		withBots: boolean,
+		includeChannelPosts: boolean,
 	}, me: MiLocalUser) {
 		const mutingChannelIds = await this.channelMutingService
 			.list({ requestUserId: me.id }, { idOnly: true })
@@ -220,11 +230,11 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			.getMany();
 		const followeeIds = followeesHasChannels.filter(x => x.followee?.channelId == null).map(f => f.followeeId);
 		const followingChannelIds = followeesHasChannels.map(x => x.followee?.channelId).filter(x => x != null).filter(x => !mutingChannelIds.includes(x));
+		const meOrFolloweeIds = [me.id, ...followeeIds];
 
 		const query = this.queryService.makePaginationQuery(this.notesRepository.createQueryBuilder('note'), ps.sinceId, ps.untilId)
 			.andWhere(new Brackets(qb => {
 				if (followeeIds.length > 0) {
-					const meOrFolloweeIds = [me.id, ...followeeIds];
 					qb.where('note.userId IN (:...meOrFolloweeIds)', { meOrFolloweeIds: meOrFolloweeIds });
 					qb.orWhere('(note.visibility = \'public\') AND (note.userHost IS NULL)');
 				} else {
@@ -243,9 +253,22 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			query.andWhere(new Brackets(qb => {
 				qb.where('note.channelId IN (:...followingChannelIds)', { followingChannelIds });
 				qb.orWhere('note.channelId IS NULL');
+				qb.orWhere(channelPostsOf([me.id], mutingChannelIds));
+				// cheripia: 「フォローしているユーザーのチャンネル投稿をTLに含める」設定
+				if (ps.includeChannelPosts) {
+					qb.orWhere(channelPostsOf(followeeIds, mutingChannelIds));
+				}
 			}));
 		} else {
-			query.andWhere('note.channelId IS NULL');
+			// 自分のチャンネル投稿は設定に関係なく常時含める
+			query.andWhere(new Brackets(qb => {
+				qb.where('note.channelId IS NULL');
+				qb.orWhere(channelPostsOf([me.id], mutingChannelIds));
+				// cheripia: 「フォローしているユーザーのチャンネル投稿をTLに含める」設定
+				if (ps.includeChannelPosts) {
+					qb.orWhere(channelPostsOf(followeeIds, mutingChannelIds));
+				}
+			}));
 		}
 
 		if (mutingChannelIds.length > 0) {

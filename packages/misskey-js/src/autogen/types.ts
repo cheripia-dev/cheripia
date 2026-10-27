@@ -4638,6 +4638,7 @@ export type components = {
             /** @enum {string} */
             twoFactorBackupCodesStock: 'full' | 'partial' | 'none';
             hideOnlineStatus: boolean;
+            includeChannelPostsInTimeline: boolean;
             hasUnreadSpecifiedNotes: boolean;
             hasUnreadMentions: boolean;
             hasUnreadAnnouncement: boolean;
@@ -30405,6 +30406,7 @@ export interface operations {
                     followersVisibility?: 'public' | 'followers' | 'private';
                     /** @enum {string} */
                     chatScope?: 'everyone' | 'followers' | 'following' | 'mutual' | 'none';
+                    includeChannelPostsInTimeline?: boolean;
                     /** Format: misskey:id */
                     pinnedPageId?: string | null;
                     mutedWords?: (string[] | string)[];

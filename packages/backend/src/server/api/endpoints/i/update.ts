@@ -228,6 +228,7 @@ export const paramDef = {
 		followingVisibility: { type: 'string', enum: ['public', 'followers', 'private'] },
 		followersVisibility: { type: 'string', enum: ['public', 'followers', 'private'] },
 		chatScope: { type: 'string', enum: ['everyone', 'followers', 'following', 'mutual', 'none'] },
+		includeChannelPostsInTimeline: { type: 'boolean' },
 		pinnedPageId: { type: 'string', format: 'misskey:id', nullable: true },
 		mutedWords: muteWords,
 		hardMutedWords: muteWords,
@@ -357,6 +358,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			if (ps.followersVisibility !== undefined) profileUpdates.followersVisibility = ps.followersVisibility;
 			if (ps.searchableBy !== undefined) updates.searchableBy = ps.searchableBy;
 			if (ps.chatScope !== undefined) updates.chatScope = ps.chatScope;
+			if (ps.includeChannelPostsInTimeline !== undefined) updates.includeChannelPostsInTimeline = ps.includeChannelPostsInTimeline;
 
 			function checkMuteWordCount(mutedWords: (string[] | string)[], limit: number) {
 				const count = (arr: (string[] | string)[]) => {

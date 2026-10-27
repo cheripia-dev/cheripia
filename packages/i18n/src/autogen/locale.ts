@@ -12610,6 +12610,14 @@ export interface Locale extends ILocale {
          * バブル
          */
         "bubble": string;
+        /**
+         * フォローしているユーザーのチャンネル投稿をホームタイムラインに含める
+         */
+        "includeChannelPostsInTimeline": string;
+        /**
+         * この設定を有効にすると、フォローしているユーザーがチャンネルに投稿したノートが、そのチャンネルをフォローしていなくてもホームタイムラインに流れるようになります。自分のチャンネル投稿はこの設定に関係なくホームタイムラインに流れます。
+         */
+        "includeChannelPostsInTimelineDescription": string;
     };
     "_play": {
         /**

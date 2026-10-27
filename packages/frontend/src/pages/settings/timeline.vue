@@ -102,24 +102,59 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 		</FormSection>
 
+		<FormSection>
+			<template #label>{{ i18n.ts.channel }}</template>
+			<div class="_gaps_m">
+				<SearchMarker :keywords="['channel', 'home', 'timeline']">
+					<MkSwitch v-model="includeChannelPostsInTimeline" @update:modelValue="saveIncludeChannelPosts">
+						<template #label><i class="ti ti-device-tv"></i> <SearchLabel>{{ i18n.ts._timelines.includeChannelPostsInTimeline }}</SearchLabel><span class="_beta">Cheripia</span></template>
+						<template #caption><SearchText>{{ i18n.ts._timelines.includeChannelPostsInTimelineDescription }}</SearchText></template>
+					</MkSwitch>
+				</SearchMarker>
+			</div>
+		</FormSection>
+
 		<MkButton primary class="save" @click="save"><i class="ti ti-device-floppy"></i> {{ i18n.ts.save }}</MkButton>
 	</div>
 </SearchMarker>
 </template>
 
 <script lang="ts" setup>
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
 import MkSwitch from '@/components/MkSwitch.vue';
 import MkButton from '@/components/MkButton.vue';
 import MkPreferenceContainer from '@/components/MkPreferenceContainer.vue';
 import FormSection from '@/components/form/section.vue';
 import { prefer } from '@/preferences.js';
+import { misskeyApi } from '@/utility/misskey-api.js';
 import { i18n } from '@/i18n.js';
+import { ensureSignin } from '@/i.js';
+import * as os from '@/os.js';
 import { definePage } from '@/page.js';
 import { suggestReload } from '@/utility/reload-suggest.js';
 
+const $i = ensureSignin();
+
 function save() {
 	suggestReload();
+}
+
+// cheripia: フォローしているユーザーのチャンネル投稿をホームタイムラインに含める設定（サーバー側保存。自分のチャンネル投稿は設定に関係なく含まれる）
+const includeChannelPostsInTimeline = ref($i.includeChannelPostsInTimeline ?? false);
+
+function saveIncludeChannelPosts(value: boolean) {
+	misskeyApi('i/update', {
+		includeChannelPostsInTimeline: value,
+	}).then(() => {
+		suggestReload();
+	}, (err) => {
+		includeChannelPostsInTimeline.value = !value;
+		os.alert({
+			type: 'error',
+			title: i18n.ts.error,
+			text: err.message,
+		});
+	});
 }
 
 const enableHomeTimeline = prefer.model('enableHomeTimeline');

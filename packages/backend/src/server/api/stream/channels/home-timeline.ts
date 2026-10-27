@@ -9,6 +9,7 @@ import type { Packed } from '@/misc/json-schema.js';
 import { NoteEntityService } from '@/core/entities/NoteEntityService.js';
 import { bindThis } from '@/decorators.js';
 import { isRenotePacked, isQuotePacked } from '@/misc/is-renote.js';
+import { isChannelPostAllowedForMe } from '@/misc/channel-timeline-filter.js';
 import type { JsonObject } from '@/misc/json-value.js';
 import { NoteStreamingHidingService } from '../NoteStreamingHidingService.js';
 import Channel, { type ChannelRequest } from '../channel.js';
@@ -48,10 +49,8 @@ export class HomeTimelineChannel extends Channel {
 	@bindThis
 	private async onNote(note: Packed<'Note'>) {
 		if (note.channelId) {
-			// そのチャンネルをフォローしていない
-			if (!this.followingChannels.has(note.channelId)) {
-				return;
-			}
+			// cheripia: 「フォローしているユーザーのチャンネル投稿をTLに含める」設定に応じて、フォローしていないチャンネルの投稿を通すかどうかを決める
+			if (!isChannelPostAllowedForMe(note, this.user!, this.followingChannels, this.following)) return;
 			if (note.user.channelId != null) {
 				// cheripia: チャンネルアカウントによる純粋なリノートの場合
 				if ( isRenotePacked(note) && !isQuotePacked(note) && note.renote) {

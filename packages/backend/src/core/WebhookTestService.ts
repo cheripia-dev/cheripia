@@ -72,6 +72,7 @@ function generateDummyUser(override?: Partial<MiUser>): MiUser {
 		autoDeleteNotesAfterDays: null,
 		autoDeleteKeepFavorites: true,
 		canChat: null,
+		includeChannelPostsInTimeline: false,
 		clipsUri: null,
 		channelId: null,
 		channel: null,

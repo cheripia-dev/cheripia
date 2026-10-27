@@ -586,6 +586,10 @@ export const packedMeDetailedOnlySchema = {
 			type: 'boolean',
 			nullable: false, optional: false,
 		},
+		includeChannelPostsInTimeline: {
+			type: 'boolean',
+			nullable: false, optional: false,
+		},
 		hasUnreadSpecifiedNotes: {
 			type: 'boolean',
 			nullable: false, optional: false,
