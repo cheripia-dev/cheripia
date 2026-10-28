@@ -228,6 +228,14 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			query.andWhere(myPostsExcludingMutedChannels(me.id, mutingChannelIds));
 		}
 
+		// cheripia: ミュート済みチャンネル投稿のリノート・引用リノートを除外する（hybrid-timeline.ts の同条件、Redis ファンアウト経路の isChannelRelated と揃える）
+		if (mutingChannelIds.length > 0) {
+			query.andWhere(new Brackets(qb => {
+				qb.orWhere('note.renoteChannelId IS NULL');
+				qb.orWhere('note.renoteChannelId NOT IN (:...mutingChannelIds)', { mutingChannelIds });
+			}));
+		}
+
 		query.andWhere(new Brackets(qb => {
 			qb
 				.where('note.replyId IS NULL') // 返信ではない

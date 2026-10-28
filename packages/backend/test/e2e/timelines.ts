@@ -905,6 +905,28 @@ describe('Timelines', () => {
 					assert.strictEqual(res.body.some((note: any) => note.id === aliceRenote.id), false);
 				});
 
+				test('ユーザー・チャンネル双方フォロー済みでミュートしているチャンネル投稿のチャンネル外リノートはTLに流れない', async () => {
+					// 「ユーザー・チャンネルともにフォローあり」分岐の renoteChannelId ミュート除外の回帰対策
+					const [alice, bob, carol] = await Promise.all([signup(), signup(), signup()]);
+					await api('following/create', { userId: bob.id }, alice);
+
+					const followedChannel = await createChannel('followed channel', carol);
+					await followChannel(followedChannel.id, alice);
+
+					const mutedChannel = await createChannel('muted channel', bob);
+					await muteChannel(mutedChannel.id, alice);
+
+					const bobNote = await post(bob, { text: 'ng', channelId: mutedChannel.id });
+					const aliceRenote = await renote(bobNote.id, alice);
+
+					await waitForPushToTl();
+
+					const res = await api('notes/timeline', { limit: 100 }, alice);
+
+					assert.strictEqual(res.body.some((note: any) => note.id === bobNote.id), false);
+					assert.strictEqual(res.body.some((note: any) => note.id === aliceRenote.id), false);
+				});
+
 				test('フォローしているユーザーのチャンネル内返信は返信を表示しない設定ならTLに流れない', async () => {
 					const [alice, bob, carol] = await Promise.all([signup(), signup(), signup()]);
 					await api('following/create', { userId: bob.id, withReplies: false }, alice);
