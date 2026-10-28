@@ -18,7 +18,7 @@ import { MiLocalUser } from '@/models/User.js';
 import { FanoutTimelineEndpointService } from '@/core/FanoutTimelineEndpointService.js';
 import { ChannelMutingService } from '@/core/ChannelMutingService.js';
 import { ChannelFollowingService } from '@/core/ChannelFollowingService.js';
-import { channelPostsOf, isChannelPostAllowedForMe, myPostsExcludingMutedChannels } from '@/misc/channel-timeline-filter.js';
+import { channelPostsOf, isChannelPostAllowedForMe, myPostsExcludingMutedChannels, noChannelOrUnmutedChannelPost } from '@/misc/channel-timeline-filter.js';
 
 export const meta = {
 	tags: ['notes'],
@@ -184,30 +184,60 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		if (followeeIds.length > 0 && followingChannelIds.length > 0) {
 			// ユーザー・チャンネルともにフォローあり
 			query.andWhere(new Brackets(qb => {
-				qb
-					.where(new Brackets(qb2 => {
-						qb2
-							.andWhere('note.userId IN (:...meOrFolloweeIds)', { meOrFolloweeIds: meOrFolloweeIds })
-							.andWhere('note.channelId IS NULL');
-					}))
-					.orWhere('note.channelId IN (:...followingChannelIds)', { followingChannelIds });
-				qb.orWhere(channelPostsOf(ps.includeChannelPosts ? [me.id, ...followeeIds] : [me.id], mutingChannelIds));
+				if (ps.includeChannelPosts) {
+					// cheripia: 設定ON時は同一内容のINリスト（meOrFolloweeIds）の再バインドを避けるため、
+					// チャンネル投稿腕（channelPostsOf）を第1腕へ統合して1回だけのバインドにする
+					// （PostgreSQLではスプレッドパラメータは同一パラメータ名でも出現箇所ごとにプレホルダへ再展開される）
+					qb
+						.where(new Brackets(qb2 => {
+							qb2
+								.andWhere('note.userId IN (:...meOrFolloweeIds)', { meOrFolloweeIds: meOrFolloweeIds })
+								.andWhere(noChannelOrUnmutedChannelPost(mutingChannelIds));
+						}))
+						.orWhere('note.channelId IN (:...followingChannelIds)', { followingChannelIds });
+				} else {
+					qb
+						.where(new Brackets(qb2 => {
+							qb2
+								.andWhere('note.userId IN (:...meOrFolloweeIds)', { meOrFolloweeIds: meOrFolloweeIds })
+								.andWhere('note.channelId IS NULL');
+						}))
+						.orWhere('note.channelId IN (:...followingChannelIds)', { followingChannelIds })
+						.orWhere(channelPostsOf([me.id], mutingChannelIds));
+				}
 			}));
 		} else if (followeeIds.length > 0) {
 			// ユーザーフォローのみ（チャンネルフォローなし）
 			query.andWhere(new Brackets(qb => {
-				qb.where(new Brackets(qb2 => {
-					qb2
-						.andWhere('note.channelId IS NULL')
-						.andWhere('note.userId IN (:...meOrFolloweeIds)', { meOrFolloweeIds: meOrFolloweeIds });
-					if (mutingChannelIds.length > 0) {
-						qb2.andWhere(new Brackets(qb3 => {
-							qb3.orWhere('note.renoteChannelId IS NULL');
-							qb3.orWhere('note.renoteChannelId NOT IN (:...mutingChannelIds)', { mutingChannelIds });
-						}));
-					}
-				}));
-				qb.orWhere(channelPostsOf(ps.includeChannelPosts ? [me.id, ...followeeIds] : [me.id], mutingChannelIds));
+				if (ps.includeChannelPosts) {
+					// cheripia: 設定ON時は同一内容のINリスト（meOrFolloweeIds）の再バインドを避けるため、
+					// チャンネル投稿腕（channelPostsOf）を第1腕へ統合して1回だけのバインドにする
+					qb.where(new Brackets(qb2 => {
+						qb2
+							.andWhere('note.userId IN (:...meOrFolloweeIds)', { meOrFolloweeIds: meOrFolloweeIds })
+							.andWhere(noChannelOrUnmutedChannelPost(mutingChannelIds));
+						// 上流 misskey-dev/misskey#17251 の renoteChannelId 条件（メソッド末尾のグローバル条件とは冗長だが上流コードとして保持）
+						if (mutingChannelIds.length > 0) {
+							qb2.andWhere(new Brackets(qb3 => {
+								qb3.orWhere('note.renoteChannelId IS NULL');
+								qb3.orWhere('note.renoteChannelId NOT IN (:...mutingChannelIds)', { mutingChannelIds });
+							}));
+						}
+					}));
+				} else {
+					qb.where(new Brackets(qb2 => {
+						qb2
+							.andWhere('note.channelId IS NULL')
+							.andWhere('note.userId IN (:...meOrFolloweeIds)', { meOrFolloweeIds: meOrFolloweeIds });
+						if (mutingChannelIds.length > 0) {
+							qb2.andWhere(new Brackets(qb3 => {
+								qb3.orWhere('note.renoteChannelId IS NULL');
+								qb3.orWhere('note.renoteChannelId NOT IN (:...mutingChannelIds)', { mutingChannelIds });
+							}));
+						}
+					}));
+					qb.orWhere(channelPostsOf([me.id], mutingChannelIds));
+				}
 			}));
 		} else if (followingChannelIds.length > 0) {
 			// チャンネルフォローのみ（ユーザーフォローなし）

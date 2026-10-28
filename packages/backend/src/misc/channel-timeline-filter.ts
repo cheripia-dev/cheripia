@@ -51,6 +51,28 @@ export function channelPostsOf(userIds: string[], mutingChannelIds: string[]): B
 }
 
 /**
+ * 「チャンネル投稿（ミュート済みチャンネルを除く）またはチャンネル非投稿」を表すSQL条件を返す。
+ * ユーザーID条件（例: `note.userId IN (:...meOrFolloweeIds)`）との結合前提で、`channelPostsOf()` と同じ
+ * ユーザーIDリストを単独で再バインドせずに済ませるために使う。
+ * （PostgreSQLではスプレッドパラメータは同一パラメータ名でも出現箇所ごとにプレホルダへ再展開されるため、
+ * 大きいINリストの2重バインドは SQL 構造の統合でしか回避できない）
+ * 単独では「チャンネル非投稿またはミュートでないチャンネル投稿」= 全チャンネル投稿＋チャンネル外投稿の条件になり、
+ * ミュートが1件もなければ常に真。ユーザーID条件と AND して初めて「そのユーザーのチャンネル投稿（ミュート除く）＋そのユーザーのチャンネル外投稿」を意味する。
+ * 注意: チャンネルフォロー済み分岐と組み合わせる場合、`followingChannelIds` はミューティ除外済みであること
+ * （`channelId NOT IN` に含まれないフォロー済みチャンネルは第1腕で通る）。
+ */
+export function noChannelOrUnmutedChannelPost(mutingChannelIds: string[]): Brackets {
+	return new Brackets(qb2 => {
+		qb2.orWhere('note.channelId IS NULL');
+		if (mutingChannelIds.length > 0) {
+			qb2.orWhere('note.channelId NOT IN (:...mutingChannelIds)', { mutingChannelIds });
+		} else {
+			qb2.orWhere('1=1');
+		}
+	});
+}
+
+/**
  * 自分の投稿（ミュート済みチャンネルへの投稿とそのリノートを除く）を表すSQL条件を返す。
  * 自分のチャンネル投稿は設定に関係なく常時含めるが、ミュート済みチャンネルは除く。
  */

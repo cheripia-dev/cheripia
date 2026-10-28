@@ -20,7 +20,7 @@ import { MiLocalUser } from '@/models/User.js';
 import { FanoutTimelineEndpointService } from '@/core/FanoutTimelineEndpointService.js';
 import { ChannelMutingService } from '@/core/ChannelMutingService.js';
 import { ChannelFollowingService } from '@/core/ChannelFollowingService.js';
-import { channelPostsOf, isChannelPostAllowedForMe } from '@/misc/channel-timeline-filter.js';
+import { channelPostsOf, isChannelPostAllowedForMe, noChannelOrUnmutedChannelPost } from '@/misc/channel-timeline-filter.js';
 import { ApiError } from '../../error.js';
 
 export const meta = {
@@ -234,7 +234,32 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 		const query = this.queryService.makePaginationQuery(this.notesRepository.createQueryBuilder('note'), ps.sinceId, ps.untilId)
 			.andWhere(new Brackets(qb => {
-				if (followeeIds.length > 0) {
+				if (ps.includeChannelPosts) {
+					// cheripia: 設定ON時は同一内容のINリスト（meOrFolloweeIds）の再バインドを避けるため、
+					// チャンネル条件腕を visibility 腕と相対する OR 腕へ再構成してバインドを1回だけにする
+					// （PostgreSQLではスプレッドパラメータは同一パラメータ名でも出現箇所ごとにプレホルダへ再展開される）
+					// 論理変換: (userId IN ids OR public∧local) AND (チャンネルフォロー or チャンネル外 or フォローユーザーのミュート除くチャンネル投稿)
+					//                  ≡ (userId IN ids AND チャンネル外 or ミュート除くチャンネル) OR (public∧local AND チャンネルフォロー or チャンネル外)
+					qb.where(new Brackets(qb2 => {
+						if (followeeIds.length > 0) {
+							qb2.andWhere('note.userId IN (:...meOrFolloweeIds)', { meOrFolloweeIds: meOrFolloweeIds });
+						} else {
+							qb2.andWhere('note.userId = :meId', { meId: me.id });
+						}
+						qb2.andWhere(noChannelOrUnmutedChannelPost(mutingChannelIds));
+					}));
+					qb.orWhere(new Brackets(qb2 => {
+						qb2.andWhere('(note.visibility = \'public\') AND (note.userHost IS NULL)');
+						if (followingChannelIds.length > 0) {
+							qb2.andWhere(new Brackets(qb3 => {
+								qb3.orWhere('note.channelId IN (:...followingChannelIds)', { followingChannelIds });
+								qb3.orWhere('note.channelId IS NULL');
+							}));
+						} else {
+							qb2.andWhere('note.channelId IS NULL');
+						}
+					}));
+				} else if (followeeIds.length > 0) {
 					qb.where('note.userId IN (:...meOrFolloweeIds)', { meOrFolloweeIds: meOrFolloweeIds });
 					qb.orWhere('(note.visibility = \'public\') AND (note.userHost IS NULL)');
 				} else {
@@ -249,18 +274,22 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			.leftJoinAndSelect('renote.user', 'renoteUser')
 			.andWhere('user.channelId IS NULL');
 
-		if (followingChannelIds.length > 0) {
-			query.andWhere(new Brackets(qb => {
-				qb.where('note.channelId IN (:...followingChannelIds)', { followingChannelIds });
-				qb.orWhere('note.channelId IS NULL');
-				qb.orWhere(channelPostsOf(ps.includeChannelPosts ? [me.id, ...followeeIds] : [me.id], mutingChannelIds));
-			}));
-		} else {
-			// 自分のチャンネル投稿は設定に関係なく常時含める
-			query.andWhere(new Brackets(qb => {
-				qb.where('note.channelId IS NULL');
-				qb.orWhere(channelPostsOf(ps.includeChannelPosts ? [me.id, ...followeeIds] : [me.id], mutingChannelIds));
-			}));
+		// cheripia: 設定ON時は上の Brackets へチャンネル条件を統合済みのため、このブロックは使わない。
+		// 設定OFF時は自分のチャンネル投稿のみを通す条件を別途追加する
+		if (!ps.includeChannelPosts) {
+			if (followingChannelIds.length > 0) {
+				query.andWhere(new Brackets(qb => {
+					qb.where('note.channelId IN (:...followingChannelIds)', { followingChannelIds });
+					qb.orWhere('note.channelId IS NULL');
+					qb.orWhere(channelPostsOf([me.id], mutingChannelIds));
+				}));
+			} else {
+				// 自分のチャンネル投稿は設定に関係なく常時含める
+				query.andWhere(new Brackets(qb => {
+					qb.where('note.channelId IS NULL');
+					qb.orWhere(channelPostsOf([me.id], mutingChannelIds));
+				}));
+			}
 		}
 
 		if (mutingChannelIds.length > 0) {
