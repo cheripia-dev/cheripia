@@ -14,7 +14,7 @@ import { describe, beforeAll, test, vi } from 'vitest';
 import { entities } from 'misskey-js';
 import { Redis } from 'ioredis';
 import { SignupResponse, Note } from 'misskey-js/entities.js';
-import { api, initTestDb, post, randomString, sendEnvUpdateRequest, signup, uploadFile, uploadUrl, UserToken } from '../utils.js';
+import { api, initTestDb, post, randomString, sendEnvUpdateRequest, signup, uploadFile, uploadUrl, UserToken, waitFire } from '../utils.js';
 import { loadConfig } from '@/config.js';
 
 function genHost() {
@@ -2278,6 +2278,44 @@ describe('Timelines', () => {
 
 						assert.strictEqual(res.body.some((note: any) => note.id === aliceNote.id), true);
 					}, waitForPushToTlOptions);
+				});
+
+				test('WS hybridTimeline: チャンネル未フォロー　＋　ユーザフォロー　＋　チャンネル投稿を含める設定　＝　ストリームに流れる', async () => {
+					const [alice, bob] = await Promise.all([signup(), signup()]);
+					await api('following/create', { userId: bob.id }, alice);
+					await api('i/update', { includeChannelPostsInTimeline: true }, alice);
+
+					const channel = await createChannel('channel', bob);
+
+					const fired = await waitFire(
+						alice,
+						'hybridTimeline',
+						async () => {
+							await post(bob, { text: 'ok', channelId: channel.id });
+						},
+						msg => msg.type === 'note' && msg.body.userId === bob.id && msg.body.channelId === channel.id,
+					);
+
+					assert.strictEqual(fired, true);
+				});
+
+				test('WS hybridTimeline: チャンネル未フォロー　＋　ユーザフォロー　＋　設定を切った後はストリームに流れない', async () => {
+					const [alice, bob] = await Promise.all([signup(), signup()]);
+					await api('following/create', { userId: bob.id }, alice);
+					await api('i/update', { includeChannelPostsInTimeline: false }, alice);
+
+					const channel = await createChannel('channel', bob);
+
+					const fired = await waitFire(
+						alice,
+						'hybridTimeline',
+						async () => {
+							await post(bob, { text: 'ok', channelId: channel.id });
+						},
+						msg => msg.type === 'note' && msg.body.userId === bob.id && msg.body.channelId === channel.id,
+					);
+
+					assert.strictEqual(fired, false);
 				});
 
 				test('チャンネル未フォロー　＋　ユーザ未フォロー　＋　チャンネルミュート　＝　TLに流れない', async () => {
