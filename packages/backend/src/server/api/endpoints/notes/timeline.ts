@@ -185,9 +185,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			// ユーザー・チャンネルともにフォローあり
 			query.andWhere(new Brackets(qb => {
 				if (ps.includeChannelPosts) {
-					// cheripia: 設定ON時は同一内容のINリスト（meOrFolloweeIds）の再バインドを避けるため、
-					// チャンネル投稿腕（channelPostsOf）を第1腕へ統合して1回だけのバインドにする
-					// （PostgreSQLではスプレッドパラメータは同一パラメータ名でも出現箇所ごとにプレホルダへ再展開される）
+					// cheripia: 設定ON時は同一内容のINリスト（meOrFolloweeIds）の重複バインドを避けるため、
+					// チャンネル投稿フィルタ（channelPostsOf）を既存クエリに統合して1回だけのバインドにする
 					qb
 						.where(new Brackets(qb2 => {
 							qb2
@@ -210,8 +209,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			// ユーザーフォローのみ（チャンネルフォローなし）
 			query.andWhere(new Brackets(qb => {
 				if (ps.includeChannelPosts) {
-					// cheripia: 設定ON時は同一内容のINリスト（meOrFolloweeIds）の再バインドを避けるため、
-					// チャンネル投稿腕（channelPostsOf）を第1腕へ統合して1回だけのバインドにする
+					// cheripia: 設定ON時は同一内容のINリスト（meOrFolloweeIds）の重複バインドを避けるため、
+					// チャンネル投稿フィルタ（channelPostsOf）を既存クエリに統合して1回だけのバインドにする
 					qb.where(new Brackets(qb2 => {
 						qb2
 							.andWhere('note.userId IN (:...meOrFolloweeIds)', { meOrFolloweeIds: meOrFolloweeIds })

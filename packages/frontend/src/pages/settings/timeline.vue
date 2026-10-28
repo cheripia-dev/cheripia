@@ -107,7 +107,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div class="_gaps_m">
 				<SearchMarker :keywords="['channel', 'home', 'timeline']">
 					<MkSwitch v-model="includeChannelPostsInTimeline" @update:modelValue="saveIncludeChannelPosts">
-						<template #label><i class="ti ti-device-tv"></i> <SearchLabel>{{ i18n.ts._timelines.includeChannelPostsInTimeline }}</SearchLabel><span class="_beta">Cheripia</span></template>
+						<template #label><SearchLabel>{{ i18n.ts._timelines.includeChannelPostsInTimeline }}</SearchLabel><span class="_beta">Cheripia</span></template>
 						<template #caption><SearchText>{{ i18n.ts._timelines.includeChannelPostsInTimelineDescription }}</SearchText></template>
 					</MkSwitch>
 				</SearchMarker>
@@ -139,7 +139,7 @@ function save() {
 	suggestReload();
 }
 
-// cheripia: この設定はサーバー側保存（他のTL設定と違い server profile に保存され、クライアント設定ではない）
+// cheripia: この設定はサーバー側保存
 const includeChannelPostsInTimeline = ref($i.includeChannelPostsInTimeline ?? false);
 
 function saveIncludeChannelPosts(value: boolean) {

@@ -235,9 +235,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		const query = this.queryService.makePaginationQuery(this.notesRepository.createQueryBuilder('note'), ps.sinceId, ps.untilId)
 			.andWhere(new Brackets(qb => {
 				if (ps.includeChannelPosts) {
-					// cheripia: 設定ON時は同一内容のINリスト（meOrFolloweeIds）の再バインドを避けるため、
-					// チャンネル条件腕を visibility 腕と相対する OR 腕へ再構成してバインドを1回だけにする
-					// （PostgreSQLではスプレッドパラメータは同一パラメータ名でも出現箇所ごとにプレホルダへ再展開される）
+					// cheripia: 設定ON時は同一内容のINリスト（meOrFolloweeIds）の重複バインドを避けるため、
+					// チャンネル条件を visibility と相対する OR へ再構成してバインドを1回だけにする
 					// 論理変換: (userId IN ids OR public∧local) AND (チャンネルフォロー or チャンネル外 or フォローユーザーのミュート除くチャンネル投稿)
 					//                  ≡ (userId IN ids AND チャンネル外 or ミュート除くチャンネル) OR (public∧local AND チャンネルフォロー or チャンネル外)
 					qb.where(new Brackets(qb2 => {
