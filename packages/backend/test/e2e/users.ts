@@ -136,6 +136,7 @@ describe('ユーザー', () => {
 			isDeleted: user.isDeleted,
 			twoFactorBackupCodesStock: user.twoFactorBackupCodesStock,
 			hideOnlineStatus: user.hideOnlineStatus,
+			includeChannelPostsInTimeline: user.includeChannelPostsInTimeline,
 			hasUnreadSpecifiedNotes: user.hasUnreadSpecifiedNotes,
 			hasUnreadMentions: user.hasUnreadMentions,
 			hasUnreadAnnouncement: user.hasUnreadAnnouncement,
