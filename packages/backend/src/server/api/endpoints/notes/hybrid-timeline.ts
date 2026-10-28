@@ -175,8 +175,6 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				withCats: ps.withCats,
 				withBots: ps.withBots,
 				noteFilter: note => {
-					// cheripia: 「フォローしているユーザーのチャンネル投稿をTLに含める」設定に応じて、Redisに混入したチャンネル投稿を通すかどうかを決める
-					// （設定を切った後にRedisへ残っている古いチャンネル投稿を除外するためにも必要）
 					if (!isChannelPostAllowedForMe(note, me.id, profile.includeChannelPostsInTimeline, followingChannels, followings)) return false;
 
 					if (note.reply && note.reply.visibility === 'followers') {
@@ -255,16 +253,12 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 			query.andWhere(new Brackets(qb => {
 				qb.where('note.channelId IN (:...followingChannelIds)', { followingChannelIds });
 				qb.orWhere('note.channelId IS NULL');
-				// cheripia: 「フォローしているユーザーのチャンネル投稿をTLに含める」設定
-				// （同一クエリ内で channelPostsOf を2回呼ぶと userIds パラメータが共有され上書きされるため、1回に統合する）
 				qb.orWhere(channelPostsOf(ps.includeChannelPosts ? [me.id, ...followeeIds] : [me.id], mutingChannelIds));
 			}));
 		} else {
 			// 自分のチャンネル投稿は設定に関係なく常時含める
 			query.andWhere(new Brackets(qb => {
 				qb.where('note.channelId IS NULL');
-				// cheripia: 「フォローしているユーザーのチャンネル投稿をTLに含める」設定
-				// （同一クエリ内で channelPostsOf を2回呼ぶと userIds パラメータが共有され上書きされるため、1回に統合する）
 				qb.orWhere(channelPostsOf(ps.includeChannelPosts ? [me.id, ...followeeIds] : [me.id], mutingChannelIds));
 			}));
 		}

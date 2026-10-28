@@ -32,6 +32,8 @@ export function isChannelPostAllowedForMe(
 /**
  * 指定ユーザーによるチャンネル投稿（ミュート済みチャンネルを除く）を表すSQL条件を返す。
  * userIdsが空のときは不正SQLを防ぐため、何もマッチしない条件を返す。
+ * 注意: 同一クエリ内でこの関数を2回呼ぶと `:userIds` パラメータが共有され上書きされるため、
+ * 呼び出しは1回に統合し、必要なユーザーIDをまとめて渡すこと。
  */
 export function channelPostsOf(userIds: string[], mutingChannelIds: string[]): Brackets {
 	return new Brackets(qb2 => {

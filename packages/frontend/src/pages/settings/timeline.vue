@@ -139,7 +139,7 @@ function save() {
 	suggestReload();
 }
 
-// cheripia: フォローしているユーザーのチャンネル投稿をホームタイムラインに含める設定（サーバー側保存。自分のチャンネル投稿は設定に関係なく含まれる）
+// cheripia: この設定はサーバー側保存（他のTL設定と違い server profile に保存され、クライアント設定ではない）
 const includeChannelPostsInTimeline = ref($i.includeChannelPostsInTimeline ?? false);
 
 function saveIncludeChannelPosts(value: boolean) {
