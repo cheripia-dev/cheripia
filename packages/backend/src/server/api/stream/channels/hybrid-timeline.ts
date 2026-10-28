@@ -11,6 +11,7 @@ import { NoteEntityService } from '@/core/entities/NoteEntityService.js';
 import { bindThis } from '@/decorators.js';
 import { RoleService } from '@/core/RoleService.js';
 import { isRenotePacked, isQuotePacked } from '@/misc/is-renote.js';
+import { isChannelPostAllowedForMe } from '@/misc/channel-timeline-filter.js';
 import type { JsonObject } from '@/misc/json-value.js';
 import { NoteStreamingHidingService } from '../NoteStreamingHidingService.js';
 import Channel, { type ChannelRequest } from '../channel.js';
@@ -84,7 +85,9 @@ export class HybridTimelineChannel extends Channel {
 		} else {
 			// 以下の条件に該当するノートのみ後続処理に通す（ので、以下のif文は該当しないノートをすべて弾くようにする）
 			// - フォローしているチャンネルの投稿
-			if (!this.followingChannels.has(note.channelId)) {
+			// - 「フォローしているユーザーのチャンネル投稿をTLに含める」設定ONかつフォローしているユーザーのチャンネル投稿
+			// - 自身のチャンネル投稿（設定に関係なく通す）
+			if (!isChannelPostAllowedForMe(note, this.user!.id, this.userProfile!.includeChannelPostsInTimeline, this.followingChannels, this.following)) {
 				return;
 			}
 		}

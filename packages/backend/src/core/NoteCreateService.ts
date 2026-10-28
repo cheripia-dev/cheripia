@@ -1212,6 +1212,40 @@ export class NoteCreateService implements OnApplicationShutdown {
 					this.fanoutTimelineService.push(`homeTimelineWithFiles:${channelFollowing.followerId}`, note.id, this.meta.perUserHomeTimelineCacheMax / 2, r);
 				}
 			}
+
+			// cheripia: フォローしているユーザーのチャンネル投稿を、設定を有効にしたフォロワーのHTLにもプッシュする
+			// （投稿者がチャンネルアカウントの場合は上でプッシュ済みなのでスキップ）
+			if (note.channel.actorId !== user.id) {
+				const recipients = await this.followingsRepository.createQueryBuilder('following')
+					.innerJoin('user_profile', 'followerprofile', 'followerprofile."userId" = following."followerId"')
+					.where('following."followeeId" = :followeeId', { followeeId: user.id })
+					.andWhere('following."followerHost" IS NULL')
+					.andWhere('following."isFollowerHibernated" = :isFollowerHibernated', { isFollowerHibernated: false })
+					.andWhere('followerprofile."includeChannelPostsInTimeline" = :includeChannelPostsInTimeline', { includeChannelPostsInTimeline: true })
+					.select('following."followerId"', 'followerId')
+					.addSelect('following."withReplies"', 'withReplies')
+					.getRawMany<{ followerId: string, withReplies: boolean }>();
+
+				// cheripia: 通常ファンアウト（isReply チェック）と同様、返信の表示を切っているフォロワーには返信をプッシュしない
+				const recipientIds = new Set<string>(recipients
+					.filter(x => !isReply(note, x.followerId) || x.withReplies)
+					.map(x => x.followerId));
+
+				// cheripia: 投稿者自身のチャンネル投稿は設定に関係なく自分のHTLにプッシュする
+				if (user.host === null) recipientIds.add(user.id);
+
+				const alreadyPushedIds = new Set<string>(channelFollowings.map(x => x.followerId));
+
+				for (const followerId of recipientIds) {
+					if (alreadyPushedIds.has(followerId)) continue;
+
+					this.fanoutTimelineService.push(`homeTimeline:${followerId}`, note.id, this.meta.perUserHomeTimelineCacheMax, r);
+					if (note.fileIds.length > 0) {
+						this.fanoutTimelineService.push(`homeTimelineWithFiles:${followerId}`, note.id, this.meta.perUserHomeTimelineCacheMax / 2, r);
+					}
+				}
+			}
+
 			this.fanoutTimelineService.push(`channelTimeline:${note.channelId}`, note.id, this.config.perChannelMaxNoteCacheCount, r);
 
 			this.fanoutTimelineService.push(`userTimelineWithChannel:${user.id}`, note.id, note.userHost == null ? this.meta.perLocalUserUserTimelineCacheMax : this.meta.perRemoteUserUserTimelineCacheMax, r);
