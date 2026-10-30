@@ -72,6 +72,15 @@ export class Resolver {
 		this.logger = this.loggerService.getLogger('ap-resolve');
 	}
 
+	/**
+	 * 解決に使う署名鍵となるローカルユーザーを設定する。
+	 * Signed Get によってフォロワー限定投稿などを解決する場合に用いる。
+	 */
+	@bindThis
+	public setUser(user: MiLocalUser): void {
+		this.user = user;
+	}
+
 	@bindThis
 	public getHistory(): string[] {
 		return Array.from(this.history);
@@ -247,7 +256,11 @@ export class ApResolverService {
 	}
 
 	@bindThis
-	public async createResolver(): Promise<Resolver> {
-		return await this.moduleRef.create(Resolver);
+	public async createResolver(resolvedBy?: MiLocalUser): Promise<Resolver> {
+		const resolver = await this.moduleRef.create(Resolver);
+		if (resolvedBy != null) {
+			resolver.setUser(resolvedBy);
+		}
+		return resolver;
 	}
 }

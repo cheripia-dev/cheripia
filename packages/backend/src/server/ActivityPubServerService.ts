@@ -18,6 +18,7 @@ import type { FollowingsRepository, NotesRepository, EmojisRepository, NoteReact
 import * as url from '@/misc/prelude/url.js';
 import type { Config } from '@/config.js';
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
+import { ApDbResolverService } from '@/core/activitypub/ApDbResolverService.js';
 import { QueueService } from '@/core/QueueService.js';
 import type { MiLocalUser, MiRemoteUser, MiUser } from '@/models/User.js';
 import { UserKeypairService } from '@/core/UserKeypairService.js';
@@ -82,6 +83,7 @@ export class ActivityPubServerService {
 		private utilityService: UtilityService,
 		private userEntityService: UserEntityService,
 		private apRendererService: ApRendererService,
+		private apDbResolverService: ApDbResolverService,
 		private queueService: QueueService,
 		private userKeypairService: UserKeypairService,
 		private queryService: QueryService,
@@ -90,6 +92,24 @@ export class ActivityPubServerService {
 		private idService: IdService,
 	) {
 		//this.createServer = this.createServer.bind(this);
+	}
+
+	@bindThis
+	private async authenticate(request: FastifyRequest): Promise<MiUser | null> {
+		let signature;
+
+		try {
+			signature = httpSignature.parseRequest(request.raw, { 'headers': ['(request-target)', 'host', 'date'], authorizationHeaderName: 'signature' });
+		} catch (e) {
+			return null;
+		}
+
+		const authUser = await this.apDbResolverService.getAuthUserFromKeyId(signature.keyId);
+		if (authUser == null) return null;
+
+		if (!httpSignature.verifySignature(signature, authUser.key.keyPem)) return null;
+
+		return authUser.user;
 	}
 
 	@bindThis
@@ -858,15 +878,42 @@ export class ActivityPubServerService {
 				return;
 			}
 
+			const user = await this.authenticate(request);
+
 			const note = await this.notesRepository.findOneBy({
 				id: request.params.note,
-				visibility: In(['public', 'home']),
 				localOnly: false,
 			});
 
 			if (note == null) {
 				reply.code(404);
 				return;
+			}
+
+			// followersの場合、認証ユーザーがフォロワーであることを確認
+			if (note.visibility === 'followers') {
+				if (user == null) {
+					reply.code(403);
+					return;
+				}
+
+				const isFollowing = await this.followingsRepository.exists({
+					where: {
+						followerId: user.id,
+						followeeId: note.userId,
+					},
+				});
+
+				if (!isFollowing) {
+					reply.code(403);
+					return;
+				}
+			} else if (note.visibility === 'specified') {
+				// specifiedの場合、認証ユーザーがvisibleUserIdsに含まれていることを確認
+				if (user == null || !note.visibleUserIds.includes(user.id)) {
+					reply.code(403);
+					return;
+				}
 			}
 
 			// リモートだったらリダイレクト
