@@ -235,7 +235,11 @@ export class ApNoteService {
 		if (visibility === 'specified' && visibleUsers.length === 0) {
 			if (typeof value === 'string') {	// 入力がstringならばresolverでGETが発生している
 				// こちらから匿名GET出来たものならばpublic
-				visibility = 'public';
+				// createResolver(resolvedBy)で特定のユーザーとしてSigned Getした場合は
+				// フォロワー限定等が取得できた可能性があるのでpublicにしない
+				if (resolver.getResolvedBy() == null) {
+					visibility = 'public';
+				}
 			}
 		}
 		let channel = null as MiChannel | null;

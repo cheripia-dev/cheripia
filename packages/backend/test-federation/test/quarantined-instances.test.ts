@@ -1,5 +1,5 @@
 import { beforeAll, describe, test } from 'vitest';
-import assert, { deepStrictEqual, strictEqual } from 'node:assert';
+import assert, { deepStrictEqual, rejects, strictEqual } from 'node:assert';
 import * as Misskey from 'misskey-js';
 import { createAccount, fetchAdmin, type LoginUser, resolveRemoteNote, resolveRemoteUser, sleep } from './utils.js';
 
@@ -230,6 +230,55 @@ describe('quarantine instance', () => {
 			//ブロックしているのでリアクションが追加されない
 			const note = await alice.client.request('notes/show', { noteId: carolPublicNote.id });
 			strictEqual(Object.values(note.reactions).length, 0);
+		});
+	});
+
+	describe('Blocked instance', () => {
+		let alice: LoginUser, bob: LoginUser;
+		let aliceInBobHost: Misskey.entities.UserDetailedNotMe;
+
+		beforeAll(async () => {
+			[alice, bob] = await Promise.all([
+				createAccount('a.test'),
+				createAccount('b.test'),
+			]);
+			[aliceInBobHost] = await Promise.all([
+				resolveRemoteUser('a.test', alice.id, bob),
+			]);
+			await bob.client.request('following/create', { userId: aliceInBobHost.id });
+			await sleep();
+		});
+
+		test('followers-only note cannot be fetched from blocked instance', async () => {
+			const noteText = `followers only ${Date.now()}`;
+			const note = (await alice.client.request('notes/create', {
+				text: noteText,
+				visibility: 'followers',
+			})).createdNote;
+			const noteUri = `https://a.test/notes/${note.id}`;
+
+			// Baseline: follower from b.test can fetch
+			const resolvedBefore = await resolveRemoteNote('a.test', note.id, bob);
+			strictEqual(resolvedBefore.text, noteText);
+
+			// a.test blocks b.test
+			await aAdmin.client.request('admin/update-meta', { blockedHosts: ['b.test'] });
+			await sleep();
+
+			try {
+				await rejects(
+					async () => await bob.client.request('ap/show', { uri: noteUri }),
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					(err: any) => {
+						strictEqual(err.code, 'REQUEST_FAILED');
+						return true;
+					},
+				);
+			} finally {
+				// Cleanup
+				await aAdmin.client.request('admin/update-meta', { blockedHosts: [] });
+				await sleep();
+			}
 		});
 	});
 });
