@@ -464,7 +464,7 @@ export class ApInboxService {
 	}
 
 	@bindThis
-	private async announceNote(actor: MiRemoteUser, activity: IAnnounce, target: IPost, resolver?: Resolver): Promise<string | void> {
+	private async announceNote(actor: MiRemoteUser, activity: IAnnounce, target: IPost, resolver: Resolver): Promise<string | void> {
 		if (actor.isSuspended) {
 			return;
 		}
@@ -493,7 +493,7 @@ export class ApInboxService {
 			// URI 指定で投稿サーバーから再取得する (upstream も同じ設計で、announceNote に resolver を渡さない)。
 			// ただし Signed Get 対応のため再取得には同じ署名ユーザーを引き継ぐ必要があり、
 			// 使用済み resolver だと履歴に残った URI で「already resolved」エラーになるため新しい resolver を作る。
-			const targetResolver = resolver.getHistory().includes(target.id)
+			const targetResolver = (target.id != null && resolver.getHistory().includes(target.id))
 				? await this.apResolverService.createResolver(resolver.getResolvedBy() ?? undefined)
 				: resolver;
 
