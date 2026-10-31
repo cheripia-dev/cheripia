@@ -1,7 +1,7 @@
 import { beforeAll, describe, test } from 'vitest';
 import assert, { deepStrictEqual, rejects, strictEqual } from 'node:assert';
 import * as Misskey from 'misskey-js';
-import { createAccount, fetchAdmin, type LoginUser, resolveRemoteNote, resolveRemoteUser, sleep } from './utils.js';
+import { createAccount, fetchAdmin, type LoginUser, resolveRemoteNote, resolveRemoteUser, sleep, waitForFollowRelation, waitForFollowers, waitForFollowing } from './utils.js';
 
 describe('quarantine instance', () => {
 	let alice: LoginUser, bob: LoginUser, carol:LoginUser;
@@ -23,6 +23,11 @@ describe('quarantine instance', () => {
 		await bob.client.request('following/create', { userId: aliceInBobHost.id });
 		await bob.client.request('following/create', { userId: carolInBobHost.id });
 		aAdmin = await fetchAdmin('a.test');
+		await Promise.all([
+			waitForFollowing(bob, 2),
+			waitForFollowers(alice, 1),
+			waitForFollowers(carol, 1),
+		]);
 		await sleep();
 	});
 	describe('isQuarantineLimit true', () => {
@@ -246,7 +251,7 @@ describe('quarantine instance', () => {
 				resolveRemoteUser('a.test', alice.id, bob),
 			]);
 			await bob.client.request('following/create', { userId: aliceInBobHost.id });
-			await sleep();
+			await waitForFollowRelation(bob, alice, 1);
 		});
 
 		test('followers-only note cannot be fetched from blocked instance', async () => {

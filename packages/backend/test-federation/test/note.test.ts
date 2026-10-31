@@ -406,7 +406,7 @@ describe('Note', () => {
 
 			// Follower follows Author
 			await follower.client.request('following/create', { userId: authorInA.id });
-			await sleep();
+			await waitForFollowRelation(follower, author, 1);
 
 			// Follower tries to fetch the note again (should success)
 			const resolvedNote = await resolveRemoteNote('b.test', note.id, follower);
@@ -431,7 +431,7 @@ describe('Note', () => {
 
 			// Follower follows Author
 			await follower.client.request('following/create', { userId: authorInA.id });
-			await sleep();
+			await waitForFollowRelation(follower, author, 1);
 
 			// Author renote the note
 			const authorRenote = await author.client.request('notes/create', {
@@ -480,7 +480,7 @@ describe('Note', () => {
 
 			// Follower follows Author
 			await follower.client.request('following/create', { userId: authorInA.id });
-			await sleep();
+			await waitForFollowRelation(follower, author, 1);
 
 			// Author replies to the note
 			const reply = (await author.client.request('notes/create', {
@@ -530,7 +530,7 @@ describe('Note', () => {
 
 			// Follower follows Author
 			await follower.client.request('following/create', { userId: authorInA.id });
-			await sleep();
+			await waitForFollowRelation(follower, author, 1);
 
 			// Author quotes the note
 			const quoteText = `quoting secret note ${Date.now()}`;
@@ -631,7 +631,7 @@ describe('Note', () => {
 
 			// Follower follows Author and fetches the note (should success)
 			await follower.client.request('following/create', { userId: authorInA.id });
-			await sleep();
+			await waitForFollowRelation(follower, author, 1);
 			const resolvedNote = await resolveRemoteNote('b.test', note.id, follower);
 			strictEqual(resolvedNote.text, noteText);
 			strictEqual(resolvedNote.visibility, 'followers');

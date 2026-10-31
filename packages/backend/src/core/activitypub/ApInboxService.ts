@@ -487,9 +487,19 @@ export class ApInboxService {
 			}
 
 			// Announce対象をresolve
+			// announce()で解決済みでも、その object をそのまま使わないこと。activity.object がアクティビティに
+			// 添付された object の場合 resolver.resolve() は origin 検証せずそのまま返すため、
+			// announce 送信サーバーが偽装した写しである可能性がある。保存するノートは必ず
+			// URI 指定で投稿サーバーから再取得する (upstream も同じ設計で、announceNote に resolver を渡さない)。
+			// ただし Signed Get 対応のため再取得には同じ署名ユーザーを引き継ぐ必要があり、
+			// 使用済み resolver だと履歴に残った URI で「already resolved」エラーになるため新しい resolver を作る。
+			const targetResolver = resolver.getHistory().includes(target.id)
+				? await this.apResolverService.createResolver(resolver.getResolvedBy() ?? undefined)
+				: resolver;
+
 			let renote;
 			try {
-				renote = await this.apNoteService.resolveNote(target, { resolver });
+				renote = await this.apNoteService.resolveNote(target, { resolver: targetResolver });
 				if (renote == null) return 'announce target is null';
 			} catch (err) {
 				// 対象が4xxならスキップ
