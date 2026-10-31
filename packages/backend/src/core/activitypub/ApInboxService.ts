@@ -4,7 +4,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { In } from 'typeorm';
+import { In, IsNull } from 'typeorm';
 import * as Redis from 'ioredis';
 import { DI } from '@/di-symbols.js';
 import type { Config } from '@/config.js';
@@ -28,9 +28,9 @@ import { UtilityService } from '@/core/UtilityService.js';
 import { NoteEntityService } from '@/core/entities/NoteEntityService.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { QueueService } from '@/core/QueueService.js';
-import type { UsersRepository, NotesRepository, FollowingsRepository, AbuseUserReportsRepository, FollowRequestsRepository, MiMeta, ChatMessagesRepository, ChatRoomsRepository, ChatRoomInvitationsRepository, ChatRoomMembershipsRepository, ChannelsRepository, MiChannel } from '@/models/_.js';
+import type { UsersRepository, NotesRepository, FollowingsRepository, AbuseUserReportsRepository, FollowRequestsRepository, MiMeta, ChatMessagesRepository, ChatRoomsRepository, ChatRoomInvitationsRepository, ChatRoomMembershipsRepository, ChannelsRepository, MiChannel, BlockingsRepository } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
-import type { MiRemoteUser } from '@/models/User.js';
+import type { MiLocalUser, MiRemoteUser, MiUser } from '@/models/User.js';
 import { GlobalEventService } from '@/core/GlobalEventService.js';
 import { AbuseReportService } from '@/core/AbuseReportService.js';
 import { IdentifiableError } from '@/misc/identifiable-error.js';
@@ -73,6 +73,9 @@ export class ApInboxService {
 
 		@Inject(DI.followRequestsRepository)
 		private followRequestsRepository: FollowRequestsRepository,
+
+		@Inject(DI.blockingsRepository)
+		private blockingsRepository: BlockingsRepository,
 
 		@Inject(DI.chatMessagesRepository)
 		private chatMessagesRepository: ChatMessagesRepository,
@@ -398,6 +401,35 @@ export class ApInboxService {
 		return `unknown target: ${activity.target}`;
 	}
 
+	/**
+	 * Signed Getでフォロワー限定投稿などを解決してくれるローカルフォロワーを探す。
+	 * ブロック関係にあるユーザーの鍵は使わない (サーバーブロックは Resolver 側の isFederationAllowedHost で除外される)。
+	 */
+	@bindThis
+	private async findLocalFollowerForSignedGet(targetActor: MiUser): Promise<MiLocalUser | null> {
+		const follower = await this.followingsRepository.createQueryBuilder('following')
+			.select('following.followerId')
+			.where('following.followeeId = :followeeId', { followeeId: targetActor.id })
+			.andWhere('following.followerHost IS NULL')
+			.andWhere(qb => {
+				const sub = qb.subQuery()
+					.select('1')
+					.from('blocking', 'blocking')
+					.where('blocking.blockerId = :targetActorId AND blocking.blockeeId = following.followerId', { targetActorId: targetActor.id })
+					.orWhere('blocking.blockerId = following.followerId AND blocking.blockeeId = :targetActorId', { targetActorId: targetActor.id })
+					.getQuery();
+				return 'NOT EXISTS ' + sub;
+			})
+			.orderBy('RANDOM()')
+			.limit(1)
+			.getOne();
+
+		if (follower == null) return null;
+
+		const user = await this.usersRepository.findOneBy({ id: follower.followerId, host: IsNull(), isSuspended: false });
+		return user as MiLocalUser | null;
+	}
+
 	@bindThis
 	private async announce(actor: MiRemoteUser, activity: IAnnounce, resolver?: Resolver): Promise<string | void> {
 		const uri = getApId(activity);
@@ -411,18 +443,28 @@ export class ApInboxService {
 		const targetUri = getApId(activity.object);
 		if (targetUri.startsWith('bear:')) return 'skip: bearcaps url not supported.';
 
-		const target = await resolver.resolve(activity.object).catch(e => {
+		let usedResolver = resolver;
+		const target = await resolver.resolve(activity.object).catch(async e => {
+			if (e instanceof StatusError && [401, 403].includes(e.statusCode)) {
+				// 適切な権限がない場合、announceしたactorのフォロワーを探し、フォロワーであるactorで再度resolveを試みる
+				const followerUser = await this.findLocalFollowerForSignedGet(actor);
+				if (followerUser != null) {
+					usedResolver = await this.apResolverService.createResolver(followerUser);
+					return await usedResolver.resolve(activity.object);
+				}
+			}
+
 			this.logger.error(`Resolution failed: ${e}`);
 			throw e;
 		});
 
-		if (isPost(target)) return await this.announceNote(actor, activity, target);
+		if (isPost(target)) return await this.announceNote(actor, activity, target, usedResolver);
 
 		return `skip: unknown object type ${getApType(target)}`;
 	}
 
 	@bindThis
-	private async announceNote(actor: MiRemoteUser, activity: IAnnounce, target: IPost, resolver?: Resolver): Promise<string | void> {
+	private async announceNote(actor: MiRemoteUser, activity: IAnnounce, target: IPost, resolver: Resolver): Promise<string | void> {
 		if (actor.isSuspended) {
 			return;
 		}
@@ -445,9 +487,19 @@ export class ApInboxService {
 			}
 
 			// Announce対象をresolve
+			// announce()で解決済みでも、その object をそのまま使わないこと。activity.object がアクティビティに
+			// 添付された object の場合 resolver.resolve() は origin 検証せずそのまま返すため、
+			// announce 送信サーバーが偽装した写しである可能性がある。保存するノートは必ず
+			// URI 指定で投稿サーバーから再取得する (upstream も同じ設計で、announceNote に resolver を渡さない)。
+			// ただし Signed Get 対応のため再取得には同じ署名ユーザーを引き継ぐ必要があり、
+			// 使用済み resolver だと履歴に残った URI で「already resolved」エラーになるため新しい resolver を作る。
+			const targetResolver = (target.id != null && resolver.getHistory().includes(target.id))
+				? await this.apResolverService.createResolver(resolver.getResolvedBy() ?? undefined)
+				: resolver;
+
 			let renote;
 			try {
-				renote = await this.apNoteService.resolveNote(target, { resolver });
+				renote = await this.apNoteService.resolveNote(target, { resolver: targetResolver });
 				if (renote == null) return 'announce target is null';
 			} catch (err) {
 				// 対象が4xxならスキップ
@@ -568,7 +620,15 @@ export class ApInboxService {
 		// eslint-disable-next-line no-param-reassign
 		resolver ??= await this.apResolverService.createResolver();
 
-		const object = await resolver.resolve(activity.object).catch(e => {
+		const object = await resolver.resolve(activity.object).catch(async e => {
+			if (e instanceof StatusError && [401, 403].includes(e.statusCode)) {
+				// 適切な権限がない場合、createしたactorのフォロワーを探し、フォロワーであるactorで再度resolveを試みる
+				const followerUser = await this.findLocalFollowerForSignedGet(actor);
+				if (followerUser != null) {
+					return await (await this.apResolverService.createResolver(followerUser)).resolve(activity.object);
+				}
+			}
+
 			this.logger.error(`Resolution failed: ${e}`);
 			throw e;
 		});
@@ -641,7 +701,17 @@ export class ApInboxService {
 			const exist = await this.apNoteService.fetchNote(note);
 			if (exist) return 'skip: note exists';
 
-			await this.apNoteService.createNote(note, actor, resolver, silent);
+			await this.apNoteService.createNote(note, actor, resolver, silent, true)
+				.catch(async (err) => {
+					if (err instanceof StatusError && [401, 403].includes(err.statusCode)) {
+						// 適切な権限がない場合、createしたactorのフォロワーを探し、フォロワーであるactorで再度resolveを試みる
+						const followerUser = await this.findLocalFollowerForSignedGet(actor);
+						if (followerUser != null) {
+							return await this.apNoteService.createNote(note, actor, await this.apResolverService.createResolver(followerUser), silent, true);
+						}
+					}
+					throw err;
+				});
 			return 'ok';
 		} catch (err) {
 			if (err instanceof StatusError && !err.isRetryable) {

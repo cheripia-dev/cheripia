@@ -8,16 +8,17 @@ import { IncomingMessage } from 'node:http';
 import { Inject, Injectable } from '@nestjs/common';
 import fastifyAccepts from '@fastify/accepts';
 import httpSignature from '@peertube/http-signature';
-import { Brackets, In, IsNull, LessThan, Not } from 'typeorm';
+import { Brackets, IsNull, LessThan, Not } from 'typeorm';
 import accepts from 'accepts';
 import vary from 'vary';
 import secureJson from 'secure-json-parse';
 import * as mfm from 'mfm-js';
 import { DI } from '@/di-symbols.js';
-import type { FollowingsRepository, NotesRepository, EmojisRepository, NoteReactionsRepository, UserProfilesRepository, UserNotePiningsRepository, UsersRepository, FollowRequestsRepository, MiMeta, ClipsRepository, ClipNotesRepository, MiClipNote } from '@/models/_.js';
+import type { FollowingsRepository, NotesRepository, EmojisRepository, NoteReactionsRepository, UserProfilesRepository, UserNotePiningsRepository, UsersRepository, FollowRequestsRepository, MiMeta, ClipsRepository, ClipNotesRepository, MiClipNote, BlockingsRepository } from '@/models/_.js';
 import * as url from '@/misc/prelude/url.js';
 import type { Config } from '@/config.js';
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
+import { ApDbResolverService } from '@/core/activitypub/ApDbResolverService.js';
 import { QueueService } from '@/core/QueueService.js';
 import type { MiLocalUser, MiRemoteUser, MiUser } from '@/models/User.js';
 import { UserKeypairService } from '@/core/UserKeypairService.js';
@@ -73,6 +74,9 @@ export class ActivityPubServerService {
 		@Inject(DI.followRequestsRepository)
 		private followRequestsRepository: FollowRequestsRepository,
 
+		@Inject(DI.blockingsRepository)
+		private blockingsRepository: BlockingsRepository,
+
 		@Inject(DI.clipsRepository)
 		private clipsRepository: ClipsRepository,
 
@@ -82,6 +86,7 @@ export class ActivityPubServerService {
 		private utilityService: UtilityService,
 		private userEntityService: UserEntityService,
 		private apRendererService: ApRendererService,
+		private apDbResolverService: ApDbResolverService,
 		private queueService: QueueService,
 		private userKeypairService: UserKeypairService,
 		private queryService: QueryService,
@@ -90,6 +95,32 @@ export class ActivityPubServerService {
 		private idService: IdService,
 	) {
 		//this.createServer = this.createServer.bind(this);
+	}
+
+	@bindThis
+	private async authenticate(request: FastifyRequest): Promise<MiUser | null> {
+		let signature;
+
+		if (request.headers.host !== this.config.host) {
+			// Host not match.
+			return null;
+		}
+
+		try {
+			signature = httpSignature.parseRequest(request.raw, { 'headers': ['(request-target)', 'host', 'date'], authorizationHeaderName: 'signature' });
+		} catch (_) {
+			return null;
+		}
+
+		const authUser = await this.apDbResolverService.getAuthUserFromKeyId(signature.keyId);
+		if (authUser == null) return null;
+
+		// ローカルユーザーの署名は受け入れない
+		if (authUser.user.host == null) return null;
+
+		if (!httpSignature.verifySignature(signature, authUser.key.keyPem)) return null;
+
+		return authUser.user;
 	}
 
 	@bindThis
@@ -858,15 +889,62 @@ export class ActivityPubServerService {
 				return;
 			}
 
+			const user = await this.authenticate(request);
+
 			const note = await this.notesRepository.findOneBy({
 				id: request.params.note,
-				visibility: In(['public', 'home']),
 				localOnly: false,
 			});
 
 			if (note == null) {
 				reply.code(404);
 				return;
+			}
+
+			// followers/specifiedはSigned Getで認証されたユーザーにのみ返す
+			if (note.visibility === 'followers' || note.visibility === 'specified') {
+				if (user == null) {
+					reply.code(403);
+					return;
+				}
+
+				// サーバーブロックされているホストのユーザーには返さない
+				if (user.host != null && !this.utilityService.isFederationAllowedHost(user.host)) {
+					reply.code(403);
+					return;
+				}
+
+				// 投稿者と認証ユーザーの間にブロック関係がある場合は返さない
+				if (await this.blockingsRepository.exists({
+					where: [
+						{ blockerId: note.userId, blockeeId: user.id },
+						{ blockerId: user.id, blockeeId: note.userId },
+					],
+				})) {
+					reply.code(403);
+					return;
+				}
+
+				// followersの場合、認証ユーザーがフォロワーであることを確認
+				if (note.visibility === 'followers') {
+					const isFollowing = await this.followingsRepository.exists({
+						where: {
+							followerId: user.id,
+							followeeId: note.userId,
+						},
+					});
+
+					if (!isFollowing) {
+						reply.code(403);
+						return;
+					}
+				} else if (note.visibility === 'specified') {
+					// specifiedの場合、認証ユーザーがvisibleUserIdsに含まれていることを確認
+					if (!note.visibleUserIds.includes(user.id)) {
+						reply.code(403);
+						return;
+					}
+				}
 			}
 
 			// リモートだったらリダイレクト
@@ -879,7 +957,12 @@ export class ActivityPubServerService {
 				return;
 			}
 
-			reply.header('Cache-Control', 'public, max-age=180');
+			// followers/specifiedの閲覧結果を公開キャッシュに載せない
+			if (note.visibility === 'public' || note.visibility === 'home') {
+				reply.header('Cache-Control', 'public, max-age=180');
+			} else {
+				reply.header('Cache-Control', 'private, no-store');
+			}
 			this.setResponseType(request, reply);
 			return this.apRendererService.addContext(await this.apRendererService.renderNote(note, false));
 		});
@@ -893,10 +976,11 @@ export class ActivityPubServerService {
 				return;
 			}
 
+			const user = await this.authenticate(request);
+
 			const note = await this.notesRepository.findOneBy({
 				id: request.params.note,
 				userHost: IsNull(),
-				visibility: In(['public', 'home']),
 				localOnly: false,
 			});
 
@@ -905,7 +989,58 @@ export class ActivityPubServerService {
 				return;
 			}
 
-			reply.header('Cache-Control', 'public, max-age=180');
+			// followers/specifiedはSigned Getで認証されたユーザーにのみ返す
+			if (note.visibility === 'followers' || note.visibility === 'specified') {
+				if (user == null) {
+					reply.code(403);
+					return;
+				}
+
+				// サーバーブロックされているホストのユーザーには返さない
+				if (user.host != null && !this.utilityService.isFederationAllowedHost(user.host)) {
+					reply.code(403);
+					return;
+				}
+
+				// 投稿者と認証ユーザーの間にブロック関係がある場合は返さない
+				if (await this.blockingsRepository.exists({
+					where: [
+						{ blockerId: note.userId, blockeeId: user.id },
+						{ blockerId: user.id, blockeeId: note.userId },
+					],
+				})) {
+					reply.code(403);
+					return;
+				}
+
+				// followersの場合、認証ユーザーがフォロワーであることを確認
+				if (note.visibility === 'followers') {
+					const isFollowing = await this.followingsRepository.exists({
+						where: {
+							followerId: user.id,
+							followeeId: note.userId,
+						},
+					});
+
+					if (!isFollowing) {
+						reply.code(403);
+						return;
+					}
+				} else if (note.visibility === 'specified') {
+					// specifiedの場合、認証ユーザーがvisibleUserIdsに含まれていることを確認
+					if (!note.visibleUserIds.includes(user.id)) {
+						reply.code(403);
+						return;
+					}
+				}
+			}
+
+			// followers/specifiedの閲覧結果を公開キャッシュに載せない
+			if (note.visibility === 'public' || note.visibility === 'home') {
+				reply.header('Cache-Control', 'public, max-age=180');
+			} else {
+				reply.header('Cache-Control', 'private, no-store');
+			}
 			this.setResponseType(request, reply);
 			return (this.apRendererService.addContext(await this.packActivity(note)));
 		});
