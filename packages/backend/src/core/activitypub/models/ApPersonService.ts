@@ -717,7 +717,7 @@ export class ApPersonService implements OnModuleInit {
 					actorId: exist.id,
 					host: exist.host,
 					description: _description,
-					isSensitive: person.sensitive ?? false,
+					isSensitive,
 				});
 				channelId = channel.id;
 			}
