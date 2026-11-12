@@ -697,14 +697,15 @@ export class ApPersonService implements OnModuleInit {
 			} catch(e) {
 				this.logger.warn(`Failed Resolve ChannelModerator: ${person.id}`);
 			}
+			const isSensitive = person.sensitive ?? false;
 			if (_channel) {
 				channelId = _channel.id;
-				if (_channel.description !== _description || _channel.name !== displayName || channelModerator?.id !== _channel.userId) {
+				if (_channel.description !== _description || _channel.name !== displayName || channelModerator?.id !== _channel.userId || isSensitive !== _channel.isSensitive) {
 					await this.channelsRepository.update({ actorId: exist.id }, {
 						name: displayName,
 						description: _description,
 						userId: channelModerator?.id ?? undefined,
-						isSensitive: person.sensitive ?? false,
+						isSensitive,
 					});
 				}
 			} else {
