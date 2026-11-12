@@ -494,6 +494,7 @@ export class ApPersonService implements OnModuleInit {
 						host,
 						userId: channelModerator?.id ?? user.id,
 						actorId: user.id,
+						isSensitive: person.sensitive ?? false,
 					}));
 					await transactionalEntityManager.update(MiUser, {
 						id: user.id,
@@ -703,6 +704,7 @@ export class ApPersonService implements OnModuleInit {
 						name: displayName,
 						description: _description,
 						userId: channelModerator?.id ?? undefined,
+						isSensitive: person.sensitive ?? false,
 					});
 				}
 			} else {
@@ -714,6 +716,7 @@ export class ApPersonService implements OnModuleInit {
 					actorId: exist.id,
 					host: exist.host,
 					description: _description,
+					isSensitive: person.sensitive ?? false,
 				});
 				channelId = channel.id;
 			}
