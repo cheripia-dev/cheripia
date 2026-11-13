@@ -647,6 +647,18 @@ export const ROUTE_DEF = [{
 	component: page(() => import('@/pages/reversi/game.vue')),
 	loginRequired: false,
 }, {
+	path: '/mahjong',
+	component: page(() => import('@/pages/mahjong/index.vue')),
+	loginRequired: true,
+}, {
+	path: '/mahjong/g/:roomId/spectate',
+	component: page(() => import('@/pages/mahjong/spectate.vue')),
+	loginRequired: true,
+}, {
+	path: '/mahjong/g/:roomId',
+	component: page(() => import('@/pages/mahjong/room.vue')),
+	loginRequired: true,
+}, {
 	path: '/qr',
 	component: page(() => import('@/pages/qr.vue')),
 	loginRequired: true,

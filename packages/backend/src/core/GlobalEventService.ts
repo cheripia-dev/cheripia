@@ -6,6 +6,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import * as Redis from 'ioredis';
 import * as Reversi from 'misskey-reversi';
+import type { House as MahjongHouse, AbortiveDrawKind as MahjongAbortiveDrawKind, TileId } from 'misskey-mahjong';
+import type { MahjongRoom } from '@/core/MahjongService.js';
 import type { MiChannel } from '@/models/Channel.js';
 import type { MiUser } from '@/models/User.js';
 import type { MiAnnouncement } from '@/models/Announcement.js';
@@ -239,6 +241,106 @@ export interface ReversiGameEventTypes {
 		reaction: string;
 	};
 }
+
+export interface MahjongRoomEventTypes {
+	joined: {
+		index: number;
+		user: Packed<'UserLite'> | null;
+	};
+	left: {
+		index: number;
+	};
+	canceled: {
+		userId: MiUser['id'];
+	};
+	changeReadyStates: {
+		user1: boolean;
+		user2: boolean;
+		user3: boolean;
+		user4: boolean;
+	};
+	started: {
+		room: MahjongRoom;
+	};
+	nextKyoku: {
+		room: MahjongRoom;
+	};
+	ended: {
+		room: MahjongRoom;
+	};
+	tsumo: {
+		house: MahjongHouse;
+		tile: number;
+	};
+	dahai: {
+		house: MahjongHouse;
+		tile: number;
+		riichi: boolean;
+	};
+	dahaiAndTsumo: {
+		dahaiHouse: MahjongHouse;
+		dahaiTile: number;
+		tsumoTile: number;
+		riichi: boolean;
+	};
+	ponned: {
+		caller: MahjongHouse;
+		callee: MahjongHouse;
+		tiles: readonly [number, number, number];
+	};
+	kanned: {
+		caller: MahjongHouse;
+		callee: MahjongHouse;
+		tiles: readonly [number, number, number, number];
+		rinsyan: number;
+		doraIndicateTiles: TileId[];
+	};
+	ciied: {
+		caller: MahjongHouse;
+		callee: MahjongHouse;
+		tiles: readonly [number, number, number];
+	};
+	ronned: {
+		callers: MahjongHouse[];
+		callee: MahjongHouse;
+		handTiles: Record<MahjongHouse, number[]>;
+		ronTile?: number;
+		chankan?: boolean;
+		uraDoraIndicateTiles: TileId[];
+	};
+	ryuukyoku: {
+		tenpaiHouses: MahjongHouse[];
+		notenHouses: MahjongHouse[];
+		pointDeltas: Record<MahjongHouse, number>;
+		abortive?: MahjongAbortiveDrawKind;
+		nagashiHouses?: MahjongHouse[];
+	};
+	ankanned: {
+		house: MahjongHouse;
+		tiles: readonly [number, number, number, number];
+		rinsyan: number;
+		doraIndicateTiles: TileId[];
+	};
+	kakanned: {
+		house: MahjongHouse;
+		tiles: readonly [number, number, number, number];
+		rinsyan: number;
+		from: MahjongHouse;
+		doraIndicateTiles: TileId[];
+	};
+	kakanDeclared: {
+		house: MahjongHouse;
+		tiles: readonly [number, number, number, number];
+		from: MahjongHouse;
+		doraIndicateTiles: TileId[];
+	};
+	tsumoHora: {
+		house: MahjongHouse;
+		handTiles: number[];
+		tsumoTile: number;
+		uraDoraIndicateTiles: TileId[];
+	};
+}
 //#endregion
 
 // 辞書(interface or type)から{ type, body }ユニオンを定義
@@ -367,6 +469,10 @@ export type GlobalEvents = {
 		name: `reversiGameStream:${MiReversiGame['id']}`;
 		payload: EventTypesToEventPayload<ReversiGameEventTypes>;
 	};
+	mahjongRoom: {
+		name: `mahjongRoomStream:${string}`;
+		payload: EventTypesToEventPayload<MahjongRoomEventTypes>;
+	};
 };
 
 // API event definitions
@@ -483,5 +589,10 @@ export class GlobalEventService {
 	@bindThis
 	public publishReversiGameStream<K extends keyof ReversiGameEventTypes>(gameId: MiReversiGame['id'], type: K, value?: ReversiGameEventTypes[K]): void {
 		this.publish(`reversiGameStream:${gameId}`, type, typeof value === 'undefined' ? null : value);
+	}
+
+	@bindThis
+	public publishMahjongRoomStream<K extends keyof MahjongRoomEventTypes>(roomId: string, type: K, value?: MahjongRoomEventTypes[K]): void {
+		this.publish(`mahjongRoomStream:${roomId}`, type, typeof value === 'undefined' ? null : value);
 	}
 }

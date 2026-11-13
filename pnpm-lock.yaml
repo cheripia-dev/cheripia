@@ -529,6 +529,9 @@ importers:
       misskey-js:
         specifier: workspace:*
         version: link:../misskey-js
+      misskey-mahjong:
+        specifier: workspace:*
+        version: link:../misskey-mahjong
       misskey-reversi:
         specifier: workspace:*
         version: link:../misskey-reversi
@@ -942,6 +945,9 @@ importers:
       misskey-js:
         specifier: workspace:*
         version: link:../misskey-js
+      misskey-mahjong:
+        specifier: workspace:*
+        version: link:../misskey-mahjong
       misskey-reversi:
         specifier: workspace:*
         version: link:../misskey-reversi
@@ -1607,6 +1613,33 @@ importers:
       tsx:
         specifier: 4.23.15
         version: 4.23.15
+
+  packages/misskey-mahjong:
+    devDependencies:
+      '@biomejs/biome':
+        specifier: 2.5.15
+        version: 2.5.15
+      '@types/node':
+        specifier: 26.6.5
+        version: 26.6.5
+      '@typescript-eslint/eslint-plugin':
+        specifier: 8.71.2
+        version: 8.71.2(@typescript-eslint/parser@8.71.2(@typescript/typescript6@6.0.2)(eslint@9.39.5(supports-color@10.2.2))(supports-color@10.2.2))(@typescript/typescript6@6.0.2)(eslint@9.39.5(supports-color@10.2.2))(supports-color@10.2.2)
+      '@typescript-eslint/parser':
+        specifier: 8.71.2
+        version: 8.71.2(@typescript/typescript6@6.0.2)(eslint@9.39.5(supports-color@10.2.2))(supports-color@10.2.2)
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
+      execa:
+        specifier: 10.1.1
+        version: 10.1.1
+      nodemon:
+        specifier: 3.1.14
+        version: 3.1.14
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/browser-playwright@5.0.5)(@vitest/coverage-v8@5.0.5)(@vitest/ui@5.0.5)(happy-dom@21.0.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))(msw@3.0.3(@types/node@26.6.5)(@typescript/typescript6@6.0.2)(graphql@16.14.0)(supports-color@10.2.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(sass-embedded@1.105.2)(sass@1.105.2)(terser@5.48.0)(tsx@4.23.15)))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(sass-embedded@1.105.2)(sass@1.105.2)(terser@5.48.0)(tsx@4.23.15))
 
   packages/misskey-reversi:
     dependencies:
@@ -18319,7 +18352,7 @@ snapshots:
       '@opentelemetry/api': 1.9.1
       '@types/node': 26.6.5
       '@vitest/browser-playwright': 5.0.5(bufferutil@4.1.0)(msw@3.0.3(@types/node@26.6.5)(@typescript/typescript6@6.0.2)(graphql@16.14.0)(supports-color@10.2.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(sass-embedded@1.105.2)(sass@1.105.2)(terser@5.48.0)(tsx@4.23.15)))(playwright@1.64.1)(utf-8-validate@6.0.6)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(sass-embedded@1.105.2)(sass@1.105.2)(terser@5.48.0)(tsx@4.23.15))(vitest@5.0.5)
-      '@vitest/coverage-v8': 5.0.5(@vitest/browser@5.0.5)(vitest@5.0.5)
+      '@vitest/coverage-v8': 5.0.5(vitest@5.0.5)
       '@vitest/ui': 5.0.5(vitest@5.0.5)
       happy-dom: 21.0.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:

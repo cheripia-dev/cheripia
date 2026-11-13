@@ -75,6 +75,7 @@ import { packedChatMessageSchema, packedChatMessageLiteSchema, packedChatMessage
 import { packedChatRoomSchema } from '@/models/json-schema/chat-room.js';
 import { packedChatRoomInvitationSchema } from '@/models/json-schema/chat-room-invitation.js';
 import { packedChatRoomMembershipSchema } from '@/models/json-schema/chat-room-membership.js';
+import { packedMahjongRoomDetailedSchema } from '@/models/json-schema/mahjong-room.js';
 import { packedAchievementNameSchema, packedAchievementSchema } from '@/models/json-schema/achievement.js';
 import { packedNoteDraftSchema } from '@/models/json-schema/note-draft.js';
 import { packedNoteHistorySchema } from '@/models/json-schema/note-history.js';
@@ -152,6 +153,7 @@ export const refs = {
 	ChatRoom: packedChatRoomSchema,
 	ChatRoomInvitation: packedChatRoomInvitationSchema,
 	ChatRoomMembership: packedChatRoomMembershipSchema,
+	MahjongRoomDetailed: packedMahjongRoomDetailedSchema,
 	NoteHistory: packedNoteHistorySchema,
 };
 

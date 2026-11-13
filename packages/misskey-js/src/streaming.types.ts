@@ -12,6 +12,7 @@ import {
 	UserDetailed,
 	UserDetailedNotMe,
 	UserLite,
+	MahjongRoomDetailed,
 } from './autogen/models.js';
 import {
 	AnnouncementCreated,
@@ -336,7 +337,150 @@ export type Channels = {
 			};
 		};
 	};
+	mahjongRoom: {
+		params: {
+			roomId: string;
+		};
+		events: {
+			joined: (payload: {
+				index: number;
+				user: UserLite | null;
+			}) => void;
+			left: (payload: {
+				index: number;
+			}) => void;
+			canceled: (payload: {
+				userId: string;
+			}) => void;
+			changeReadyStates: (payload: {
+				user1: boolean;
+				user2: boolean;
+				user3: boolean;
+				user4: boolean;
+			}) => void;
+			started: (payload: {
+				room: MahjongRoomDetailed;
+			}) => void;
+			nextKyoku: (payload: {
+				room: MahjongRoomDetailed;
+			}) => void;
+			ended: (payload: {
+				room: MahjongRoomDetailed;
+			}) => void;
+			spectatorState: (payload: {
+				room: MahjongRoomDetailed;
+			}) => void;
+			tsumo: (payload: {
+				house: MahjongHouse;
+				tile: number;
+			}) => void;
+			dahai: (payload: {
+				house: MahjongHouse;
+				tile: number;
+				riichi: boolean;
+			}) => void;
+			dahaiAndTsumo: (payload: {
+				dahaiHouse: MahjongHouse;
+				dahaiTile: number;
+				tsumoTile: number;
+				riichi: boolean;
+			}) => void;
+			ponned: (payload: {
+				caller: MahjongHouse;
+				callee: MahjongHouse;
+				tiles: readonly [number, number, number];
+			}) => void;
+			kanned: (payload: {
+				caller: MahjongHouse;
+				callee: MahjongHouse;
+				tiles: readonly [number, number, number, number];
+				rinsyan: number;
+				doraIndicateTiles: number[];
+			}) => void;
+			ciied: (payload: {
+				caller: MahjongHouse;
+				callee: MahjongHouse;
+				tiles: readonly [number, number, number];
+			}) => void;
+			ronned: (payload: {
+				callers: MahjongHouse[];
+				callee: MahjongHouse;
+				handTiles: Record<MahjongHouse, number[]>;
+				ronTile?: number;
+				chankan?: boolean;
+				uraDoraIndicateTiles: number[];
+			}) => void;
+			ryuukyoku: (payload: {
+				tenpaiHouses: MahjongHouse[];
+				notenHouses: MahjongHouse[];
+				pointDeltas: Record<MahjongHouse, number>;
+				abortive?: string;
+				nagashiHouses?: MahjongHouse[];
+			}) => void;
+			ankanned: (payload: {
+				house: MahjongHouse;
+				tiles: readonly [number, number, number, number];
+				rinsyan: number;
+				doraIndicateTiles: number[];
+			}) => void;
+			kakanned: (payload: {
+				house: MahjongHouse;
+				tiles: readonly [number, number, number, number];
+				rinsyan: number;
+				from: MahjongHouse;
+				doraIndicateTiles: number[];
+			}) => void;
+			kakanDeclared: (payload: {
+				house: MahjongHouse;
+				tiles: readonly [number, number, number, number];
+				from: MahjongHouse;
+				doraIndicateTiles: number[];
+			}) => void;
+			tsumoHora: (payload: {
+				house: MahjongHouse;
+				handTiles: number[];
+				tsumoTile: number;
+				uraDoraIndicateTiles: number[];
+			}) => void;
+		};
+		receives: {
+			ready: boolean;
+			addAi: Record<string, never>;
+			updateSettings: {
+				key: 'timeLimitForEachTurn';
+				value: number;
+			} | {
+				key: 'matchLength';
+				value: 'east' | 'south';
+			};
+			removeAi: {
+				index: number;
+			};
+			leave: Record<string, never>;
+			confirmNextKyoku: Record<string, never>;
+			dahai: {
+				tile: number;
+				riichi?: boolean;
+			};
+			tsumoHora: Record<string, never>;
+			ronHora: Record<string, never>;
+			pon: Record<string, never>;
+			cii: {
+				pattern: 'x__' | '_x_' | '__x';
+			};
+			kan: Record<string, never>;
+			ankan: {
+				tile: number;
+			};
+			kakan: {
+				tile: number;
+			};
+			nop: Record<string, never>;
+		};
+	};
 };
+
+type MahjongHouse = 'e' | 's' | 'w' | 'n';
 
 export type NoteUpdatedEvent = { id: Note['id'] } & ({
 	type: 'reacted';

@@ -50,6 +50,7 @@ import { ChatUserChannel } from './api/stream/channels/chat-user.js';
 import { ChatRoomChannel } from './api/stream/channels/chat-room.js';
 import { ReversiChannel } from './api/stream/channels/reversi.js';
 import { ReversiGameChannel } from './api/stream/channels/reversi-game.js';
+import { MahjongRoomChannel } from './api/stream/channels/mahjong-room.js';
 import { NoteStreamingHidingService } from './api/stream/NoteStreamingHidingService.js';
 import { SigninWithPasskeyApiService } from './api/SigninWithPasskeyApiService.js';
 import { BubbleTimelineChannel } from './api/stream/channels/bubble-timeline.js';
@@ -96,6 +97,7 @@ import { BubbleTimelineChannel } from './api/stream/channels/bubble-timeline.js'
 		ChatRoomChannel,
 		ReversiChannel,
 		ReversiGameChannel,
+		MahjongRoomChannel,
 		HomeTimelineChannel,
 		HybridTimelineChannel,
 		LocalTimelineChannel,

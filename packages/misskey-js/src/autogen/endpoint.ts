@@ -519,6 +519,12 @@ import type {
 	InviteLimitResponse,
 	InviteListRequest,
 	InviteListResponse,
+	MahjongCreateRoomResponse,
+	MahjongJoinRoomRequest,
+	MahjongJoinRoomResponse,
+	MahjongRoomsResponse,
+	MahjongShowRoomRequest,
+	MahjongShowRoomResponse,
 	MetaRequest,
 	MetaResponse,
 	MiauthGenTokenRequest,
@@ -1089,6 +1095,10 @@ export type Endpoints = {
 	'invite/delete': { req: InviteDeleteRequest; res: EmptyResponse };
 	'invite/limit': { req: EmptyRequest; res: InviteLimitResponse };
 	'invite/list': { req: InviteListRequest; res: InviteListResponse };
+	'mahjong/create-room': { req: EmptyRequest; res: MahjongCreateRoomResponse };
+	'mahjong/join-room': { req: MahjongJoinRoomRequest; res: MahjongJoinRoomResponse };
+	'mahjong/rooms': { req: EmptyRequest; res: MahjongRoomsResponse };
+	'mahjong/show-room': { req: MahjongShowRoomRequest; res: MahjongShowRoomResponse };
 	'meta': { req: MetaRequest; res: MetaResponse };
 	'miauth/gen-token': { req: MiauthGenTokenRequest; res: MiauthGenTokenResponse };
 	'mute/create': { req: MuteCreateRequest; res: EmptyResponse };

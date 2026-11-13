@@ -119,6 +119,7 @@
 		"mfm-js": "git+https://github.com/cheripia-dev/mfm.js.git#d6f9e13f93efd2db355c9374efe0a8e66ec7616d",
 		"mime-types": "3.0.2",
 		"misskey-js": "workspace:*",
+		"misskey-mahjong": "workspace:*",
 		"misskey-reversi": "workspace:*",
 		"ms": "3.0.0-canary.202508261828",
 		"nanoid": "6.0.2",

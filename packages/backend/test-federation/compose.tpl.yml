@@ -80,6 +80,14 @@ services:
         target: /cherrypick/packages/misskey-reversi/package.json
         read_only: true
       - type: bind
+        source: ../../misskey-mahjong/built
+        target: /cherrypick/packages/misskey-mahjong/built
+        read_only: true
+      - type: bind
+        source: ../../misskey-mahjong/package.json
+        target: /cherrypick/packages/misskey-mahjong/package.json
+        read_only: true
+      - type: bind
         source: ../../../healthcheck.sh
         target: /cherrypick/healthcheck.sh
         read_only: true
