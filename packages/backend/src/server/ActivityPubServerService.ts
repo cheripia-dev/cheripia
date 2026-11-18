@@ -543,6 +543,10 @@ export class ActivityPubServerService {
 	private async decorations(request: FastifyRequest<{
 		Params: { user: string; };
 	}>, reply: FastifyReply) {
+		if (this.meta.federation === 'none') {
+			reply.code(403);
+			return;
+		}
 		const userId = request.params.user;
 
 		const user = await this.usersRepository.findOne({
@@ -552,6 +556,7 @@ export class ActivityPubServerService {
 			},
 			select: {
 				id: true,
+				host: true,
 				avatarDecorations: true,
 			},
 		});

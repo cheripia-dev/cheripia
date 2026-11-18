@@ -258,6 +258,9 @@ export const isIOrderedCollectionPage = (object: IObject): object is IOrderedCol
 export const isClip = (object: IObject): object is IClip =>
 	getApType(object) === 'Clip' || getApType(object) === 'Playlist';
 
+export const isCisDecorationlip = (object: IObject): object is IApDecoration =>
+	getApType(object) === 'Decoration';
+
 export interface IApPropertyValue extends IObject {
 	type: 'PropertyValue';
 	identifier: IApPropertyValue;
@@ -363,6 +366,7 @@ export interface IApDecoration extends IObject {
 	offsetX?: number; //アイコンの幅を基準に、そのn倍右側に移動させる
 	offsetY?: number; //アイコンの高さを基準に、そのn倍下側に移動させる
 	scale?: number; //アイコンのサイズを基準に、そのn倍で描画
+	opacity?: number, //不透明度0~1
 }
 export const isGame = (object: IObject): object is IApGame =>
 	getApType(object) === 'Game';

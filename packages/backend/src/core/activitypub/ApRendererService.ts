@@ -452,9 +452,9 @@ export class ApRendererService {
 	public async renderDecorations(user: MiUser): Promise<IApDecoration[]> {
 		if (user.avatarDecorations.length <= 0) return [];
 		const instanceDecorations = await this.avatarDecorationService.getAll((user.host === null) ? 'local' : 'remoteOnly', false);
-		const activeUserDecorations = instanceDecorations.filter(id => user.avatarDecorations.some(d => d.id === id.id));
+		const activeUserDecorations = instanceDecorations.filter(deco => user.avatarDecorations.some(d => d.id === deco.id));
 		return user.avatarDecorations.map(ud => {
-			const instance = activeUserDecorations.find(id => id.id === ud.id) ?? null;
+			const instance = activeUserDecorations.find(d => d.id === ud.id) ?? null;
 			const url = instance?.rawUrl ?? instance?.url;
 			return {
 				instance,
@@ -464,12 +464,13 @@ export class ApRendererService {
 		}).filter(ud => ud.instance != null).map(ud => ({
 			type: 'Decoration',
 			required_properties: [],
-			id: ud.id,
+			id: `${this.config.url}/decorations/${ud.id}`,
 			image: ud.url ? {
 				type: 'Image',
 				url: ud.url,
 				sensitive: false,
 				name: ud.instance?.name,
+				summary: ud.instance?.description,
 			} : undefined,
 			angle: ud.angle || undefined, //radian
 			flipV: undefined, //上下反転
