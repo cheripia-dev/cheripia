@@ -7,6 +7,8 @@ import { Entity, PrimaryColumn, Index, Column, ManyToOne, JoinColumn } from 'typ
 import { id } from './util/id.js';
 
 @Entity('avatar_decoration')
+// APub受信(remoteDecorationsFromAp)の重複排除が(host, rawUrl)で毎回検索するため、順次スキャンを避ける複合インデックス
+@Index(['host', 'rawUrl'])
 export class MiAvatarDecoration {
 	@PrimaryColumn(id())
 	public id: string;

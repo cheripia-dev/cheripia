@@ -31,6 +31,12 @@ import type { Config } from '@/config.js';
 // 6. するか迷う: MiAvatarDecorationのカラムにdescriptionの他にライセンス欄を追加する
 // 7. するか迷う: APubでデコレーションを配信する? => PersonのOrderedCollection(_yojoart_decorations)として実装(プル型)
 // 8. avatar-decorationのjson-schemaを作る => packするためには必要
+
+// リモート配信値の数値をi/updateのparamDefと同じ保存範囲(angle ±0.5回転、offsetX/Y ±0.25、scale 0.5-1.5、opacity 0.1-1)に収めるための補助関数。
+// NaN/Infinity等の非有限値は既定値へフォールバックする
+const toFiniteNumber = (v: unknown, def: number): number => (typeof v === 'number' && Number.isFinite(v)) ? v : def;
+const clampNumber = (v: number, min: number, max: number): number => Math.min(Math.max(v, min), max);
+
 @Injectable()
 export class AvatarDecorationService implements OnApplicationShutdown {
 	public cache: MemorySingleCache<MiAvatarDecoration[]>;
@@ -74,6 +80,8 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 				case 'avatarDecorationUpdated':
 				case 'avatarDecorationDeleted': {
 					this.cache.delete();
+					// create()/update()はリモートデコレーション(host付き行)にも使われるため、他プロセスでもcacheRemoteを破棄する
+					this.cacheRemote.delete();
 					break;
 				}
 				default:
@@ -292,7 +300,9 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 
 			// flipVは保存先が無い為未対応。required_propertiesに未対応プロパティが宣言されたitemは取り込まない
 			const supportedProperties = ['image', 'angle', 'flipH', 'offsetX', 'offsetY', 'scale', 'opacity'];
-			if ((item.required_properties ?? []).some(p => p === 'flipV' || !supportedProperties.includes(p))) continue;
+			// required_propertiesは外部入力なので配列でない場合(文字列等)は空扱いにする(.some()のTypeError防止)
+			const requiredProperties = Array.isArray(item.required_properties) ? item.required_properties : [];
+			if (requiredProperties.some(p => p === 'flipV' || !supportedProperties.includes(p))) continue;
 
 			const image = item.image;
 			const imageUrl = typeof image === 'string' ? image : image?.url;
@@ -306,10 +316,23 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 			}
 			if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') continue;
 
+			// urlカラムはvarchar(1024) NOT NULL。極長URLはcreate/updateのDBエラーを誘発するためitemごと除外する(truncateすると壊れたURLになる)
+			if (imageUrl.length > 1024) continue;
+
 			const name = (typeof image === 'object' && typeof image.name === 'string' ? image.name : undefined) ??
 				(typeof item.name === 'string' ? item.name : undefined);
 			const description = (typeof image === 'object' && typeof image.summary === 'string' ? image.summary : undefined) ??
 				(typeof item.summary === 'string' ? item.summary : undefined);
+
+			// getApIdはidが文字列idを持たない値(数値・配列等)の場合throwするため先にガードする
+			let apId: string | null = null;
+			if (item.id != null) {
+				try {
+					apId = getApId(item.id);
+				} catch {
+					apId = null;
+				}
+			}
 
 			const decorationData = {
 				name: truncate(name, 256) ?? '',
@@ -317,7 +340,7 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 				url: imageUrl,
 				rawUrl: imageUrl,
 				host: userHost,
-				remoteId: item.id != null && getApId(item.id).length <= 32 ? getApId(item.id) : null,
+				remoteId: apId != null && apId.length <= 32 ? apId : null,
 			};
 
 			const existingDecoration = await this.avatarDecorationsRepository.findOneBy({
@@ -326,23 +349,33 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 			});
 
 			let decorationId: string;
+			let changed = existingDecoration == null;
 			if (existingDecoration == null) {
 				const created = await this.create(decorationData);
 				decorationId = created.id;
 			} else {
-				await this.update(existingDecoration.id, decorationData);
+				// 定義行は(host, rawUrl)で同一hostの複数ユーザーに共有されるため、差分が無い行への
+				// 無意味なUPDATE(updatedAt書き換え+全プロセス向けのcache invalidate event)をスキップする
+				changed =
+					decorationData.name !== existingDecoration.name ||
+					decorationData.description !== existingDecoration.description ||
+					decorationData.url !== existingDecoration.url ||
+					decorationData.remoteId !== existingDecoration.remoteId;
+				if (changed) await this.update(existingDecoration.id, decorationData);
 				decorationId = existingDecoration.id;
 			}
-			this.cacheRemote.delete();
+			if (changed) this.cacheRemote.delete();
 
+			const rawAngle = toFiniteNumber(item.angle, 0) / (Math.PI * 2);
 			updates.avatarDecorations.push({
 				id: decorationId,
-				angle: typeof item.angle === 'number' ? item.angle / (Math.PI * 2) : 0,
+				// angle は1周周期で正規化してから保存(i/updateの保存可能域[-0.5, 0.5]に揃える)
+				angle: rawAngle - Math.round(rawAngle),
 				flipH: item.flipH === true,
-				offsetX: typeof item.offsetX === 'number' ? item.offsetX / 2 : 0,
-				offsetY: typeof item.offsetY === 'number' ? item.offsetY / 2 : 0,
-				scale: typeof item.scale === 'number' ? item.scale / 2 : 1,
-				opacity: typeof item.opacity === 'number' ? item.opacity : 1,
+				offsetX: clampNumber(toFiniteNumber(item.offsetX, 0) / 2, -0.25, 0.25),
+				offsetY: clampNumber(toFiniteNumber(item.offsetY, 0) / 2, -0.25, 0.25),
+				scale: clampNumber(toFiniteNumber(item.scale, 2) / 2, 0.5, 1.5),
+				opacity: clampNumber(toFiniteNumber(item.opacity, 1), 0.1, 1),
 			});
 		}
 
