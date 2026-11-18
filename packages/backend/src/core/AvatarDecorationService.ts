@@ -16,16 +16,20 @@ import type { GlobalEvents } from '@/core/GlobalEventService.js';
 import { ModerationLogService } from '@/core/ModerationLogService.js';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
 import { appendQuery, query } from '@/misc/prelude/url.js';
+import { getApId, isDecoration } from '@/core/activitypub/type.js';
+import { toArray } from '@/misc/prelude/array.js';
+import { truncate } from '@/misc/truncate.js';
+import type { Resolver } from '@/core/activitypub/ApResolverService.js';
 import type { Config } from '@/config.js';
 
 // TODO:
 // 1. checkDuplicateする => done
 // 2. リモートのデコレーションをproxy通してないメディアURLで保存できるようにする => プロキシのURLだと403になるので必須
 // 3. AvatarDecorationsEntityServiceを作ってpackする
-// 4. リモートユーザーのデコレーションを適宜fetchできる関数とAPIを作る
-// 5. remoteUserUpdateの処理をAPIfetchの部分とアップデートの部分に分ける => 4をやるためには必要
+// 4. リモートユーザーのデコレーションを適宜fetchできる関数とAPIを作る => remoteUserUpdateFromAp として実装
+// 5. remoteUserUpdateの処理をAPIfetchの部分とアップデートの部分に分ける => APub版(remoteUserUpdateFromAp)と旧API版(remoteUserUpdate)の分岐で対応
 // 6. するか迷う: MiAvatarDecorationのカラムにdescriptionの他にライセンス欄を追加する
-// 7. するか迷う: APubでデコレーションを配信する? => Misskey自体は今のところやることなさそうだからやるならnsを作る必要がある
+// 7. するか迷う: APubでデコレーションを配信する? => PersonのOrderedCollection(_yojoart_decorations)として実装(プル型)
 // 8. avatar-decorationのjson-schemaを作る => packするためには必要
 @Injectable()
 export class AvatarDecorationService implements OnApplicationShutdown {
@@ -143,7 +147,13 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 	}
 
 	@bindThis
-	public async remoteUserUpdate(user: MiUser): Promise<string> {
+	public async remoteUserUpdate(user: MiUser, resolver?: Resolver): Promise<string> {
+		if (user.decorationsUri != null) {
+			// ActorにOrderedCollectionを公開しているインスタンスはAPub版を優先する(旧API方式是fallback)
+			if (resolver == null) return 'skip: prefer remoteUserUpdateFromAp';
+			return this.remoteUserUpdateFromAp(user, resolver);
+		}
+
 		const userHost = user.host ?? '';
 		const instance = await this.instancesRepository.findOneBy({ host: userHost });
 		const userHostUrl = `https://${user.host}`;
@@ -238,6 +248,108 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 		if (!(await this.usersRepository.update({ id: user.id, isDeleted: false }, updates)).affected) {
 			return 'skip';
 		}
+		return 'ok';
+	}
+
+	/**
+	 * Actorに公開されたOrderedCollection(decorationsUri)からリモートアバターデコレーションを取り込む。
+	 * 配信側はorderedItemsにitemをinlineで載せるが、firstページ参照形にも一応対応する。
+	 * 配信値の単位系はIApDecorationのコメント通りアイコン基準(angleはradian)なので、
+	 * 取り込み時にjsonb保存単位の系(angleは回転比1=1周、offset/scaleは既定描画サイズ=アイコン一辺の2倍基準)へ逆変換する。
+	 * デコレーション定義の重複排除は(host, rawUrl=画像URL)キーで行う(旧API方式の(host, remoteId)キーとは別に管理される)。
+	 */
+	@bindThis
+	public async remoteUserUpdateFromAp(user: MiUser, resolver: Resolver): Promise<string> {
+		if (user.host == null || user.uri == null) return 'skip';
+		if (user.decorationsUri == null) return 'skip';
+
+		const collection = await resolver.resolveOrderedCollection(user.decorationsUri);
+
+		if (collection.id != null && new URL(getApId(collection.id)).origin !== new URL(user.uri).origin) {
+			return 'skip: collection origin mismatch';
+		}
+
+		let items = collection.orderedItems;
+
+		if (items == null && collection.first != null) {
+			const page = await resolver.resolveOrderedCollectionPage(collection.first);
+			if (page.partOf == null || getApId(page.partOf) !== getApId(user.decorationsUri)) {
+				return 'skip: page partOf mismatch';
+			}
+			items = page.orderedItems ?? page.items;
+		}
+
+		const userHost = user.host;
+		const updates = {} as Partial<MiUser>;
+		updates.avatarDecorations = [];
+
+		// 装着数の上限はi/updateのアバターデコレーション上限(16)に合わせる
+		for (const rawItem of toArray(items ?? []).slice(0, 16)) {
+			const item = typeof rawItem === 'string'
+				? await resolver.resolve(rawItem).catch(() => null)
+				: rawItem;
+			if (item == null || !isDecoration(item)) continue;
+
+			// flipVは保存先が無い為未対応。required_propertiesに未対応プロパティが宣言されたitemは取り込まない
+			const supportedProperties = ['image', 'angle', 'flipH', 'offsetX', 'offsetY', 'scale', 'opacity'];
+			if ((item.required_properties ?? []).some(p => p === 'flipV' || !supportedProperties.includes(p))) continue;
+
+			const image = item.image;
+			const imageUrl = typeof image === 'string' ? image : image?.url;
+			if (typeof imageUrl !== 'string') continue;
+
+			let parsedUrl: URL;
+			try {
+				parsedUrl = new URL(imageUrl);
+			} catch {
+				continue;
+			}
+			if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') continue;
+
+			const name = (typeof image === 'object' && typeof image.name === 'string' ? image.name : undefined) ??
+				(typeof item.name === 'string' ? item.name : undefined);
+			const description = (typeof image === 'object' && typeof image.summary === 'string' ? image.summary : undefined) ??
+				(typeof item.summary === 'string' ? item.summary : undefined);
+
+			const decorationData = {
+				name: truncate(name, 256) ?? '',
+				description: truncate(description, 2048) ?? '',
+				url: imageUrl,
+				rawUrl: imageUrl,
+				host: userHost,
+				remoteId: item.id != null && getApId(item.id).length <= 32 ? getApId(item.id) : null,
+			};
+
+			const existingDecoration = await this.avatarDecorationsRepository.findOneBy({
+				host: userHost,
+				rawUrl: imageUrl,
+			});
+
+			let decorationId: string;
+			if (existingDecoration == null) {
+				const created = await this.create(decorationData);
+				decorationId = created.id;
+			} else {
+				await this.update(existingDecoration.id, decorationData);
+				decorationId = existingDecoration.id;
+			}
+			this.cacheRemote.delete();
+
+			updates.avatarDecorations.push({
+				id: decorationId,
+				angle: typeof item.angle === 'number' ? item.angle / (Math.PI * 2) : 0,
+				flipH: item.flipH === true,
+				offsetX: typeof item.offsetX === 'number' ? item.offsetX / 2 : 0,
+				offsetY: typeof item.offsetY === 'number' ? item.offsetY / 2 : 0,
+				scale: typeof item.scale === 'number' ? item.scale / 2 : 1,
+				opacity: typeof item.opacity === 'number' ? item.opacity : 1,
+			});
+		}
+
+		if (!(await this.usersRepository.update({ id: user.id, isDeleted: false }, updates)).affected) {
+			return 'skip';
+		}
+
 		return 'ok';
 	}
 

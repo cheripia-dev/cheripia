@@ -592,7 +592,7 @@ export class ApPersonService implements OnModuleInit {
 
 		await this.updateFeatured(user.id, resolver).catch(err => this.logger.error(err));
 		await this.apClipService.updateUserClips(user.id, resolver).catch(err => this.logger.error(err));
-		//TODO cheripia アバターデコレーション取得
+		await this.avatarDecorationService.remoteUserUpdateFromAp(user, resolver).catch(err => this.logger.error(err));
 
 		return user;
 	}
@@ -800,12 +800,12 @@ export class ApPersonService implements OnModuleInit {
 		if (moving) updates.movedAt = new Date();
 
 		// Update user
-		const user = await this.usersRepository.findOneByOrFail({ id: exist.id });
-		await this.avatarDecorationService.remoteUserUpdate(user);
-
 		if (!(await this.usersRepository.update({ id: exist.id, isDeleted: false }, updates)).affected) {
 			return 'skip';
 		}
+
+		// リモートアバターデコレーションはActorのOrderedCollection(decorationsUri)優先で取り込み、無ければ旧API方式にフォールバック
+		await this.avatarDecorationService.remoteUserUpdate({ ...exist, ...updates }, resolver).catch(err => this.logger.error(err));
 
 		if (person.publicKey) {
 			await this.userPublickeysRepository.update({ userId: exist.id }, {
