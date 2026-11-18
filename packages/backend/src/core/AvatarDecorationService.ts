@@ -26,8 +26,8 @@ import type { Config } from '@/config.js';
 // 1. checkDuplicateする => done
 // 2. リモートのデコレーションをproxy通してないメディアURLで保存できるようにする => プロキシのURLだと403になるので必須
 // 3. AvatarDecorationsEntityServiceを作ってpackする
-// 4. リモートユーザーのデコレーションを適宜fetchできる関数とAPIを作る => remoteUserUpdateFromAp として実装
-// 5. remoteUserUpdateの処理をAPIfetchの部分とアップデートの部分に分ける => APub版(remoteUserUpdateFromAp)と旧API版(remoteUserUpdate)の分岐で対応
+// 4. リモートユーザーのデコレーションを適宜fetchできる関数とAPIを作る => remoteDecorationsFromAp として実装
+// 5. remoteUserUpdateの処理をAPIfetchの部分とアップデートの部分に分ける => APub版(remoteDecorationsFromAp)と旧API版(remoteUserUpdate)の分岐で対応
 // 6. するか迷う: MiAvatarDecorationのカラムにdescriptionの他にライセンス欄を追加する
 // 7. するか迷う: APubでデコレーションを配信する? => PersonのOrderedCollection(_yojoart_decorations)として実装(プル型)
 // 8. avatar-decorationのjson-schemaを作る => packするためには必要
@@ -150,8 +150,8 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 	public async remoteUserUpdate(user: MiUser, resolver?: Resolver): Promise<string> {
 		if (user.decorationsUri != null) {
 			// ActorにOrderedCollectionを公開しているインスタンスはAPub版を優先する(旧API方式是fallback)
-			if (resolver == null) return 'skip: prefer remoteUserUpdateFromAp';
-			return this.remoteUserUpdateFromAp(user, resolver);
+			if (resolver == null) return 'skip: prefer remoteDecorationsFromAp';
+			return this.remoteDecorationsFromAp(user, resolver);
 		}
 
 		const userHost = user.host ?? '';
@@ -259,7 +259,7 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 	 * デコレーション定義の重複排除は(host, rawUrl=画像URL)キーで行う(旧API方式の(host, remoteId)キーとは別に管理される)。
 	 */
 	@bindThis
-	public async remoteUserUpdateFromAp(user: MiUser, resolver: Resolver): Promise<string> {
+	public async remoteDecorationsFromAp(user: MiUser, resolver: Resolver): Promise<string> {
 		if (user.host == null || user.uri == null) return 'skip';
 		if (user.decorationsUri == null) return 'skip';
 

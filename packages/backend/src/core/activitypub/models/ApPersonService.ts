@@ -592,7 +592,7 @@ export class ApPersonService implements OnModuleInit {
 
 		await this.updateFeatured(user.id, resolver).catch(err => this.logger.error(err));
 		await this.apClipService.updateUserClips(user.id, resolver).catch(err => this.logger.error(err));
-		await this.avatarDecorationService.remoteUserUpdateFromAp(user, resolver).catch(err => this.logger.error(err));
+		await this.avatarDecorationService.remoteDecorationsFromAp(user, resolver).catch(err => this.logger.error(err));
 
 		return user;
 	}
