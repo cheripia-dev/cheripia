@@ -591,6 +591,7 @@ export class ApPersonService implements OnModuleInit {
 
 		await this.updateFeatured(user.id, resolver).catch(err => this.logger.error(err));
 		await this.apClipService.updateUserClips(user.id, resolver).catch(err => this.logger.error(err));
+		//TODO cheripia アバターデコレーション取得
 
 		return user;
 	}

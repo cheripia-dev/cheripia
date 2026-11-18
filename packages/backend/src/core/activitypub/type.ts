@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { ApImageService } from './models/ApImageService.js';
+
 export type Obj = { [x: string]: any };
 export type ApObject = IObject | string | (IObject | string)[];
 
@@ -240,6 +242,7 @@ export interface IActor extends IObject {
 	}[];
 	_yojoart_clips?: string | null;
 	playlists?: string | null,
+	decorations?: string | IOrderedCollection;
 }
 
 export const isCollection = (object: IObject): object is ICollection =>
@@ -350,6 +353,18 @@ export interface IApReversi extends IApGame {
 		ready?: boolean, //準備完了
 		pos?: number, //石配置
 	};
+}
+// cheripia 装飾。アイコンなどに対して付属する画像
+export interface IApDecoration extends IObject {
+	type: 'Decoration',
+	image?: IApImage,
+	required_propertys: string[], //必須オプション(対応していないものがあればこのIApDecorationを無視)
+	angle?: number; //radian
+	flipV?: boolean; //上下反転
+	flipH?: boolean; //左右反転
+	offsetX?: number; //アイコンの幅を基準に、そのn倍右側に移動させる
+	offsetY?: number; //アイコンの高さを基準に、そのn倍下側に移動させる
+	scale?: number; //アイコンのサイズを基準に、そのn倍で描画
 }
 export const isGame = (object: IObject): object is IApGame =>
 	getApType(object) === 'Game';

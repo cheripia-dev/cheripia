@@ -23,7 +23,7 @@ import { MfmService } from '@/core/MfmService.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { DriveFileEntityService } from '@/core/entities/DriveFileEntityService.js';
 import type { MiUserKeypair } from '@/models/UserKeypair.js';
-import type { UsersRepository, UserProfilesRepository, NotesRepository, DriveFilesRepository, PollsRepository, EventsRepository, MiMeta, MiClip, ChannelsRepository } from '@/models/_.js';
+import type { UsersRepository, UserProfilesRepository, NotesRepository, DriveFilesRepository, PollsRepository, EventsRepository, MiMeta, MiClip, ChannelsRepository, MiAvatarDecoration } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
 import { CustomEmojiService } from '@/core/CustomEmojiService.js';
 import { IdService } from '@/core/IdService.js';
@@ -32,11 +32,12 @@ import { escapeHtml } from '@/misc/escape-html.js';
 import { RoleService } from '@/core/RoleService.js';
 import { searchableTypes } from '@/types.js';
 import { isPureRenote } from '../entities/NoteEntityService.js';
+import { AvatarDecorationService } from '../AvatarDecorationService.js';
 import { JsonLdService } from './JsonLdService.js';
 import { ApMfmService } from './ApMfmService.js';
 import { CONTEXT } from './misc/contexts.js';
 import { toSerchableByProperty } from './misc/searchableBy.js';
-import type { IAccept, IActivity, IAdd, IAnnounce, IApDocument, IApEmoji, IApHashtag, IApImage, IApMention, IApReversi, IBlock, IClip, ICreate, IDelete, IFlag, IFollow, IInvite, IJoin, IKey, ILeave, ILike, IMove, IObject, IOrderedCollection, IPost, IQuestion, IRead, IReject, IRemove, ITombstone, IUndo, IUpdate } from './type.js';
+import type { IAccept, IActivity, IAdd, IAnnounce, IApDecoration, IApDocument, IApEmoji, IApHashtag, IApImage, IApMention, IApReversi, IBlock, IClip, ICreate, IDelete, IFlag, IFollow, IInvite, IJoin, IKey, ILeave, ILike, IMove, IObject, IOrderedCollection, IPost, IQuestion, IRead, IReject, IRemove, ITombstone, IUndo, IUpdate } from './type.js';
 
 @Injectable()
 export class ApRendererService {
@@ -78,6 +79,7 @@ export class ApRendererService {
 		private idService: IdService,
 		private utilityService: UtilityService,
 		private roleService: RoleService,
+		private avatarDecorationService: AvatarDecorationService,
 	) {
 	}
 
@@ -447,6 +449,37 @@ export class ApRendererService {
 	}
 
 	@bindThis
+	public async renderDecorations(user: MiUser): Promise<IApDecoration[]> {
+		if (user.avatarDecorations.length <= 0) return [];
+		const instanceDecorations = await this.avatarDecorationService.getAll((user.host === null) ? 'local' : 'remoteOnly', false);
+		const targetDecorations = instanceDecorations.filter(id => user.avatarDecorations.some(d => d.id === id.id));
+		return user.avatarDecorations.map(ud => {
+			const instance = targetDecorations.find(id => id.id === ud.id) ?? null;
+			return {
+				instance,
+				...ud,
+			};
+		}).filter(ud => ud.instance != null).map(ud => ({
+			type: 'Decoration',
+			required_propertys: [],
+			id: ud.id,
+			image: {
+				type: 'Image',
+				id: ud.instance?.id,
+				url: ud.instance ? this.avatarDecorationService.getPublicUrl(ud.instance) : undefined,
+				sensitive: false,
+				name: ud.instance?.name,
+			},
+			angle: ud.angle || undefined, //radian
+			flipV: undefined, //上下反転
+			flipH: ud.flipH || undefined, //左右反転
+			offsetX: ud.offsetX || undefined, //アイコンの幅を基準に、そのn倍右側に移動させる
+			offsetY: ud.offsetY || undefined, //アイコンの高さを基準に、そのn倍下側に移動させる
+			scale: ud.scale || undefined, //アイコンのサイズを基準に、そのn倍で描画
+			opacity: ud.opacity || undefined, //不透明度
+		} as IApDecoration));
+	}
+	@bindThis
 	public renderClip(clip: MiClip): IClip {
 		const rendered = {
 			type: 'Clip',
@@ -756,6 +789,7 @@ export class ApRendererService {
 		const searchableByData = toSerchableByProperty(this.config.url, user.id, user.searchableBy);
 
 		const channel = user.channelId ? await this.channelsRepository.findOneBy({ id: user.channelId }) : null;
+		const decorations = user.avatarDecorations.length > 0 ? `${id}/collections/decorations` : this.renderOrderedCollection(`${id}/collections/decorations`, 0, undefined, undefined, []);
 
 		const person: any = {
 			type: isSystem ? 'Application' : user.channelId ? 'Group' : user.isBot ? 'Service' : 'Person',
@@ -792,6 +826,7 @@ export class ApRendererService {
 			isSquareAvatars: user.isSquareAvatars ?? undefined,
 			_yojoart_clips: `${id}/collections/clips`,
 			...(channel?.userId ? { attributedTo: this.userEntityService.genLocalUserUri(channel.userId) } : {} ),
+			decorations,
 		};
 
 		if (user.movedToUri) {

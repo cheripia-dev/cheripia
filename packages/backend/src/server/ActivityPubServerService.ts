@@ -540,6 +540,41 @@ export class ActivityPubServerService {
 	}
 
 	@bindThis
+	private async decorations(request: FastifyRequest<{
+		Params: { user: string; };
+	}>, reply: FastifyReply) {
+		const userId = request.params.user;
+
+		const user = await this.usersRepository.findOne({
+			where: {
+				id: userId,
+				host: IsNull(),
+			},
+			select: {
+				id: true,
+				avatarDecorations: true,
+			},
+		});
+
+		if (user == null) {
+			reply.code(404);
+			return;
+		}
+		const partOf = `${this.config.url}/users/${userId}/collections/decorations`;
+		const decorations = await this.apRendererService.renderDecorations(user);
+		const rendered = this.apRendererService.renderOrderedCollection(
+			partOf,
+			decorations.length,
+			undefined,
+			undefined,
+			decorations,
+		);
+		reply.header('Cache-Control', 'public, max-age=180');
+		this.setResponseType(request, reply);
+		return (this.apRendererService.addContext(rendered));
+	}
+
+	@bindThis
 	private async clips(request: FastifyRequest<{
 		Params: { clip: string; };
 		Querystring: { since_id?: string; until_id?: string; page?: string; };
@@ -1078,6 +1113,11 @@ export class ActivityPubServerService {
 			Params: { clip: string; };
 			Querystring: { since_id?: string; until_id?: string; page?: string; };
 		}>('/clips/:clip', { constraints: { apOrHtml: 'ap' } }, async (request, reply) => await this.clips(request, reply));
+
+		// decorations
+		fastify.get<{
+			Params: { user: string; };
+		}>('/users/:user/collections/decorations', async (request, reply) => await this.decorations(request, reply));
 
 		// publickey
 		fastify.get<{ Params: { user: string; } }>('/users/:user/publickey', async (request, reply) => {
