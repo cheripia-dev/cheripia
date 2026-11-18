@@ -154,7 +154,8 @@ function getDecorationScale(decoration: Decoration | DecorationEditorDecoration)
 function getDecorationOffset(decoration: Decoration | DecorationEditorDecoration) {
 	const offsetX = decoration.offsetX ?? 0;
 	const offsetY = decoration.offsetY ?? 0;
-	// translate の基準はデコレーション既定描画サイズ(アイコンの一辺の2倍)と同じ割合になるよう 200% する
+	// translate の基準はアイコンボックスに統一。従来と同じ割合(デコレーション既定描画サイズ=アイコン一辺の2倍基準)になるよう 200% する。
+	// 非正方形画像では縦の基準が画像高さからアイコン高さへ変わるため、旧保存値の縦オフセット位置は変化する(中心揃えの仕様統一として意図的)。
 	return offsetX === 0 && offsetY === 0 ? undefined : `${offsetX * 200}% ${offsetY * 200}%`;
 }
 
