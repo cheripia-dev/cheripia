@@ -46,6 +46,7 @@ function generateDummyUser(override?: Partial<MiUser>): MiUser {
 		avatarBlurhash: null,
 		bannerBlurhash: null,
 		avatarDecorations: [],
+		decorationsUri: null,
 		tags: [],
 		isSuspended: false,
 		isLocked: false,
