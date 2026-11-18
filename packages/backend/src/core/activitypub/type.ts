@@ -356,6 +356,9 @@ export interface IApReversi extends IApGame {
 	};
 }
 // cheripia 装飾。アイコンなどに対して付属する画像
+// 幾何系の値はすべてアイコン基準:
+// 既定描画サイズはアイコンの一辺の2倍で、アイコンに対して中央に配置される。
+// angleの回転中心とflipH/flipVの対称軸はアイコンの中心、offsetX/offsetYはアイコン中心からの変位。
 export interface IApDecoration extends IObject {
 	type: 'Decoration',
 	image?: IApImage,
@@ -365,7 +368,7 @@ export interface IApDecoration extends IObject {
 	flipH?: boolean; //左右反転
 	offsetX?: number; //アイコンの幅を基準に、そのn倍右側に移動させる
 	offsetY?: number; //アイコンの高さを基準に、そのn倍下側に移動させる
-	scale?: number; //アイコンのサイズを基準に、そのn倍で描画
+	scale?: number; //アイコンのサイズを基準に、そのn倍で描画(1 = アイコン一辺と同じ大きさ。既定描画は2)
 	opacity?: number, //不透明度0~1
 }
 export const isGame = (object: IObject): object is IApGame =>

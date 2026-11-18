@@ -471,13 +471,15 @@ export class ApRendererService {
 				name: ud.instance?.name,
 				summary: ud.instance?.description,
 			} : undefined,
-			angle: ud.angle || undefined, //radian
+			// jsonb保存値の単位系(angle: 回転比 1=360°, offset/scale: デコレーション既定描画サイズ=アイコン一辺の2倍基準)を、
+			// IApDecorationのコメント基準(アイコン基準・radian)へ変換して配信する
+			angle: ud.angle != null ? ud.angle * Math.PI * 2 : undefined, //radian
 			flipV: undefined, //上下反転
-			flipH: ud.flipH || undefined, //左右反転
-			offsetX: ud.offsetX || undefined, //アイコンの幅を基準に、そのn倍右側に移動させる
-			offsetY: ud.offsetY || undefined, //アイコンの高さを基準に、そのn倍下側に移動させる
-			scale: ud.scale || undefined, //アイコンのサイズを基準に、そのn倍で描画
-			opacity: ud.opacity || undefined, //不透明度
+			flipH: ud.flipH ?? undefined, //左右反転
+			offsetX: ud.offsetX != null ? ud.offsetX * 2 : undefined, //アイコンの幅を基準に、そのn倍右側に移動させる
+			offsetY: ud.offsetY != null ? ud.offsetY * 2 : undefined, //アイコンの高さを基準に、そのn倍下側に移動させる
+			scale: ud.scale != null ? ud.scale * 2 : undefined, //アイコンのサイズを基準に、そのn倍で描画
+			opacity: ud.opacity ?? undefined, //不透明度
 		} as IApDecoration));
 	}
 	@bindThis

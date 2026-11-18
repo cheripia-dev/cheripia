@@ -47,10 +47,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 	</div>
 	<template v-if="showDecoration">
-		<img
+		<div
 			v-for="decoration in decorations ?? user.avatarDecorations"
 			:class="[$style.decoration, { [$style.decorationBlink]: getDecorationIsBrink(decoration) }]"
-			:src="getDecorationUrl(decoration)"
 			:style="{
 				rotate: getDecorationAngle(decoration),
 				scale: getDecorationScale(decoration),
@@ -58,10 +57,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 				transform: getDecorationTransform(decoration),
 				opacity: getDecorationOpacity(decoration),
 			}"
-			alt=""
-			draggable="false"
-			style="-webkit-user-drag: none;"
 		>
+			<img
+				:class="$style.decorationImage"
+				:src="getDecorationUrl(decoration)"
+				alt=""
+				draggable="false"
+				style="-webkit-user-drag: none;"
+			>
+		</div>
 	</template>
 </component>
 </template>
@@ -150,7 +154,8 @@ function getDecorationScale(decoration: Decoration | DecorationEditorDecoration)
 function getDecorationOffset(decoration: Decoration | DecorationEditorDecoration) {
 	const offsetX = decoration.offsetX ?? 0;
 	const offsetY = decoration.offsetY ?? 0;
-	return offsetX === 0 && offsetY === 0 ? undefined : `${offsetX * 100}% ${offsetY * 100}%`;
+	// translate の基準はデコレーション既定描画サイズ(アイコンの一辺の2倍)と同じ割合になるよう 200% する
+	return offsetX === 0 && offsetY === 0 ? undefined : `${offsetX * 200}% ${offsetY * 200}%`;
 }
 
 function getDecorationIsBrink(decoration: Decoration | DecorationEditorDecoration) {
@@ -416,13 +421,21 @@ onUnmounted(() => {
 	}
 }
 
+// 変換(rotate/scale/translate)の基準と回転中心をアイコンボックス(中心)にするためのアンカー。
+// 画像は従来通りアイコン一辺の2倍で中央配置する。
 .decoration {
 	position: absolute;
 	z-index: 1;
-	top: -50%;
-	left: -50%;
-	width: 200%;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	pointer-events: none;
+}
+
+.decorationImage {
+	width: 200%;
+	flex-shrink: 0;
 }
 
 .decorationBlink {
