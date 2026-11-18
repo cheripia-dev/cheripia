@@ -240,7 +240,7 @@ export interface IActor extends IObject {
 	}[];
 	_yojoart_clips?: string | null;
 	playlists?: string | null,
-	decorations?: string | IOrderedCollection;
+	_yojoart_decorations?: string | IOrderedCollection;
 }
 
 export const isCollection = (object: IObject): object is ICollection =>
@@ -258,7 +258,7 @@ export const isIOrderedCollectionPage = (object: IObject): object is IOrderedCol
 export const isClip = (object: IObject): object is IClip =>
 	getApType(object) === 'Clip' || getApType(object) === 'Playlist';
 
-export const isCisDecorationlip = (object: IObject): object is IApDecoration =>
+export const isDecoration = (object: IObject): object is IApDecoration =>
 	getApType(object) === 'Decoration';
 
 export interface IApPropertyValue extends IObject {

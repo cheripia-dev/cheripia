@@ -577,7 +577,7 @@ const extension_context_definition = {
 	'banner': 'yojoart:banner',
 	'Game': 'yojoart:Game',
 	'_yojoart_clips': 'yojoart:_yojoart_clips',
-	'decorations': 'yojoart:decorations',
+	'_yojoart_decorations': 'yojoart:_yojoart_decorations',
 	'Decoration': 'yojoart:Decoration',
 	'required_properties': 'yojoart:required_properties',
 	'angle': { '@id': 'yojoart:angle', '@type': 'xsd:double' },

@@ -464,7 +464,6 @@ export class ApRendererService {
 		}).filter(ud => ud.instance != null).map(ud => ({
 			type: 'Decoration',
 			required_properties: [],
-			id: `${this.config.url}/decorations/${ud.id}`,
 			image: ud.url ? {
 				type: 'Image',
 				url: ud.url,
@@ -827,7 +826,7 @@ export class ApRendererService {
 			isSquareAvatars: user.isSquareAvatars ?? undefined,
 			_yojoart_clips: `${id}/collections/clips`,
 			...(channel?.userId ? { attributedTo: this.userEntityService.genLocalUserUri(channel.userId) } : {} ),
-			decorations: `${id}/collections/decorations`,
+			_yojoart_decorations: `${id}/collections/decorations`,
 		};
 
 		if (user.movedToUri) {

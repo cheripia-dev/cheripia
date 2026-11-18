@@ -1119,7 +1119,7 @@ export class ActivityPubServerService {
 			Querystring: { since_id?: string; until_id?: string; page?: string; };
 		}>('/clips/:clip', { constraints: { apOrHtml: 'ap' } }, async (request, reply) => await this.clips(request, reply));
 
-		// decorations
+		// _yojoart_decorations
 		fastify.get<{
 			Params: { user: string; };
 		}>('/users/:user/collections/decorations', async (request, reply) => await this.decorations(request, reply));
