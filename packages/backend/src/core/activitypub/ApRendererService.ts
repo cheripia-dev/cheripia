@@ -23,7 +23,7 @@ import { MfmService } from '@/core/MfmService.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { DriveFileEntityService } from '@/core/entities/DriveFileEntityService.js';
 import type { MiUserKeypair } from '@/models/UserKeypair.js';
-import type { UsersRepository, UserProfilesRepository, NotesRepository, DriveFilesRepository, PollsRepository, EventsRepository, MiMeta, MiClip, ChannelsRepository, MiAvatarDecoration } from '@/models/_.js';
+import type { UsersRepository, UserProfilesRepository, NotesRepository, DriveFilesRepository, PollsRepository, EventsRepository, MiMeta, MiClip, ChannelsRepository } from '@/models/_.js';
 import { bindThis } from '@/decorators.js';
 import { CustomEmojiService } from '@/core/CustomEmojiService.js';
 import { IdService } from '@/core/IdService.js';
@@ -452,24 +452,25 @@ export class ApRendererService {
 	public async renderDecorations(user: MiUser): Promise<IApDecoration[]> {
 		if (user.avatarDecorations.length <= 0) return [];
 		const instanceDecorations = await this.avatarDecorationService.getAll((user.host === null) ? 'local' : 'remoteOnly', false);
-		const targetDecorations = instanceDecorations.filter(id => user.avatarDecorations.some(d => d.id === id.id));
+		const activeUserDecorations = instanceDecorations.filter(id => user.avatarDecorations.some(d => d.id === id.id));
 		return user.avatarDecorations.map(ud => {
-			const instance = targetDecorations.find(id => id.id === ud.id) ?? null;
+			const instance = activeUserDecorations.find(id => id.id === ud.id) ?? null;
+			const url = instance?.rawUrl ?? instance?.url;
 			return {
 				instance,
+				url,
 				...ud,
 			};
 		}).filter(ud => ud.instance != null).map(ud => ({
 			type: 'Decoration',
-			required_propertys: [],
+			required_properties: [],
 			id: ud.id,
-			image: {
+			image: ud.url ? {
 				type: 'Image',
-				id: ud.instance?.id,
-				url: ud.instance ? this.avatarDecorationService.getPublicUrl(ud.instance) : undefined,
+				url: ud.url,
 				sensitive: false,
 				name: ud.instance?.name,
-			},
+			} : undefined,
 			angle: ud.angle || undefined, //radian
 			flipV: undefined, //上下反転
 			flipH: ud.flipH || undefined, //左右反転
@@ -789,7 +790,6 @@ export class ApRendererService {
 		const searchableByData = toSerchableByProperty(this.config.url, user.id, user.searchableBy);
 
 		const channel = user.channelId ? await this.channelsRepository.findOneBy({ id: user.channelId }) : null;
-		const decorations = user.avatarDecorations.length > 0 ? `${id}/collections/decorations` : this.renderOrderedCollection(`${id}/collections/decorations`, 0, undefined, undefined, []);
 
 		const person: any = {
 			type: isSystem ? 'Application' : user.channelId ? 'Group' : user.isBot ? 'Service' : 'Person',
@@ -826,7 +826,7 @@ export class ApRendererService {
 			isSquareAvatars: user.isSquareAvatars ?? undefined,
 			_yojoart_clips: `${id}/collections/clips`,
 			...(channel?.userId ? { attributedTo: this.userEntityService.genLocalUserUri(channel.userId) } : {} ),
-			decorations,
+			decorations: `${id}/collections/decorations`,
 		};
 
 		if (user.movedToUri) {

@@ -3,8 +3,6 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { ApImageService } from './models/ApImageService.js';
-
 export type Obj = { [x: string]: any };
 export type ApObject = IObject | string | (IObject | string)[];
 
@@ -358,7 +356,7 @@ export interface IApReversi extends IApGame {
 export interface IApDecoration extends IObject {
 	type: 'Decoration',
 	image?: IApImage,
-	required_propertys: string[], //必須オプション(対応していないものがあればこのIApDecorationを無視)
+	required_properties: string[], //必須オプション(対応していないものがあればこのIApDecorationを無視)
 	angle?: number; //radian
 	flipV?: boolean; //上下反転
 	flipH?: boolean; //左右反転

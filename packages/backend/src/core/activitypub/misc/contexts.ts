@@ -577,6 +577,8 @@ const extension_context_definition = {
 	'banner': 'yojoart:banner',
 	'Game': 'yojoart:Game',
 	'_yojoart_clips': 'yojoart:_yojoart_clips',
+	'decorations': 'yojoart:decorations',
+	'Decoration': 'yojoart:Decoration',
 	// vcard
 	vcard: 'http://www.w3.org/2006/vcard/ns#',
 	// CherryPick
