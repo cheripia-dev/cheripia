@@ -5,7 +5,7 @@
 
 import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import * as Redis from 'ioredis';
-import { IsNull, Not } from 'typeorm';
+import { In, IsNull, Not } from 'typeorm';
 import type { AvatarDecorationsRepository, InstancesRepository, UsersRepository, MiAvatarDecoration, MiUser } from '@/models/_.js';
 import { IdService } from '@/core/IdService.js';
 import { GlobalEventService } from '@/core/GlobalEventService.js';
@@ -37,6 +37,27 @@ import type { Config } from '@/config.js';
 const toFiniteNumber = (v: unknown, def: number): number => (typeof v === 'number' && Number.isFinite(v)) ? v : def;
 const clampNumber = (v: number, min: number, max: number): number => Math.min(Math.max(v, min), max);
 
+// リモートデコレーション定義の孤児行クリーンアップ(定期cleanジョブから呼ばれる)の設定。
+// リモート由来の行が無制限に増えること自体は、リモートユーザーが無制限に添付や投稿を作成できるのと同じで仕様互換なので上限を設けない。
+// 削除対象は「どのユーザーからも参照されなくなった行」のみとし、保持期間内の行は取り込み処理と並行して間もなく参照され始める可能性があるため触らない。
+// 未参照行はフェッチ成功(再取り込み)のあったホストでしか発生しないため、フェッチ成功時にホストをRedisセットへマークし、
+// ジョブはマークされたホストのみ処理する。変更の無いホストはジョブの対象外。
+const CLEANUP_HOSTS_REDIS_KEY = 'avatarDecorationCleanup:hosts';
+const CLEANUP_HOSTS_POP_SIZE = 100;
+// 1回の実行で処理するホスト数の上限(超過分はセットに残り次回以降に処理)
+const CLEANUP_MAX_HOSTS_PER_RUN = 1000;
+const REMOTE_DECORATION_CLEANUP_RETENTION_MS = 1000 * 60 * 60 * 24 * 7; // 7日
+const REMOTE_DECORATION_CLEANUP_BATCH_SIZE = 500;
+// ホスト1件あたりの削除バッチ数上限(到達時は未処理としてホストを再マークする)
+const REMOTE_DECORATION_CLEANUP_MAX_BATCHES_PER_HOST = 20;
+
+// 定義行idがどのユーザーのavatarDecorations(jsonb)からも参照されていないかの判定条件。
+// idキーの無い要素は ->> 'id' がNULLになり NOT IN 全体がunknownで空集合(=何も削除されない)になるためNULLを除外する
+const NOT_REFERENCED_SQL = `decoration."id" NOT IN (
+	SELECT elem ->> 'id' FROM "user" "u", jsonb_array_elements("u"."avatarDecorations") AS elem
+	WHERE "u"."avatarDecorations" <> '[]'::jsonb AND (elem ->> 'id') IS NOT NULL
+)`;
+
 @Injectable()
 export class AvatarDecorationService implements OnApplicationShutdown {
 	public cache: MemorySingleCache<MiAvatarDecoration[]>;
@@ -48,6 +69,9 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 
 		@Inject(DI.redisForSub)
 		private redisForSub: Redis.Redis,
+
+		@Inject(DI.redis)
+		private redisClient: Redis.Redis,
 
 		@Inject(DI.avatarDecorationsRepository)
 		private avatarDecorationsRepository: AvatarDecorationsRepository,
@@ -187,6 +211,8 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 				return 'skip';
 			}
 
+			await this.markHostForDecorationCleanup(userHost);
+
 			return 'ok';
 		}
 
@@ -256,6 +282,7 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 		if (!(await this.usersRepository.update({ id: user.id, isDeleted: false }, updates)).affected) {
 			return 'skip';
 		}
+		await this.markHostForDecorationCleanup(userHost);
 		return 'ok';
 	}
 
@@ -383,7 +410,21 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 			return 'skip';
 		}
 
+		await this.markHostForDecorationCleanup(userHost);
+
 		return 'ok';
+	}
+
+	/**
+	 * 定期クリーンアップ(cleanUnusedRemoteDecorations)の処理対象ホストをマークする。
+	 * リモートユーザーの取り込み成功時にのみ付与され、変更の無いホストは定期ジョブから外れる。
+	 * 取り込みでユーザーの参照が書き換わった可能性があるため、定義行差分の有無にかかわらずマークする
+	 * (コレクションから項目が消えた場合、旧定義行は更新されずupdatedAt等のシグナルも残らない)。
+	 */
+	@bindThis
+	private async markHostForDecorationCleanup(host: string | null): Promise<void> {
+		if (host == null) return;
+		await this.redisClient.sadd(CLEANUP_HOSTS_REDIS_KEY, host);
 	}
 
 	@bindThis
@@ -399,6 +440,76 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 				avatarDecoration: avatarDecoration,
 			});
 		}
+	}
+
+	/**
+	 * 取り込み成功のあったリモートホストについて、どのユーザーからも参照されなくなった
+	 * デコレーション定義行を削除する(定期cleanジョブ用)。
+	 * remoteDecorationsFromAp / remoteUserUpdate では、配信コレクションから項目が消えたり
+	 * URLが差し替えられたりした旧定義行を明示的に削除しないため、放置すると未使用行が残り続ける。
+	 * 行が増えること自体はリモート由来の添付や投稿と同様に仕様互換なので上限は設けず、
+	 * 参照が切れた孤児行のみを保持期間(7日)経過後に削除する。
+	 * 対象はRedisセット(markHostForDecorationCleanup)でマークされたホストのみで、
+	 * 変更の無いホストはジョブから外す。マークはリモートユーザーの取り込み成功時のみ付与される。
+	 * 参照判定は全ユーザーのavatarDecorations(jsonb)のid集合に対する反対結合で行い、
+	 * (host, rawUrl)キーで同一hostの複数ユーザーに共有された定義行は、参照しているユーザーが1人でもいれば削除されない。
+	 * ローカル行(hostがnull)は管理画面で管理者が運用する対象なので、ホストマークが付かないため対象外。
+	 * 保持期間内の未参照行が残ったホストは、次回以降のジョブで処理できるよう再マークする。
+	 * @returns 削除した行数
+	 */
+	@bindThis
+	public async cleanUnusedRemoteDecorations(): Promise<number> {
+		const cutoff = this.idService.gen(Date.now() - REMOTE_DECORATION_CLEANUP_RETENTION_MS);
+
+		// 処理対象ホストを先にすべて取り出してから処理する。
+		// 処理中に再マークしたホストを同じ実行でspopし直すと、保持期間内の行があるホストで空回りするため
+		// 再マークは全ホストの処理後にまとめて行う
+		const hosts: string[] = [];
+		for (let popped = 0; popped < CLEANUP_MAX_HOSTS_PER_RUN;) {
+			const batch = await this.redisClient.spop(CLEANUP_HOSTS_REDIS_KEY, CLEANUP_HOSTS_POP_SIZE);
+			if (batch.length === 0) break;
+			hosts.push(...batch);
+			popped += batch.length;
+		}
+
+		let totalDeleted = 0;
+		const pendingHosts: string[] = [];
+
+		for (const host of hosts) {
+			for (let batch = 0; batch < REMOTE_DECORATION_CLEANUP_MAX_BATCHES_PER_HOST; batch++) {
+				const orphans = await this.avatarDecorationsRepository.createQueryBuilder('decoration')
+					.where('decoration.host = :host', { host })
+					.andWhere('decoration.id < :cutoff', { cutoff })
+					.andWhere(NOT_REFERENCED_SQL)
+					.orderBy('decoration.id', 'ASC')
+					.limit(REMOTE_DECORATION_CLEANUP_BATCH_SIZE)
+					.getMany();
+
+				if (orphans.length === 0) break;
+
+				await this.avatarDecorationsRepository.delete({ id: In(orphans.map(x => x.id)) });
+
+				// 各プロセスのcacheRemoteを無効化するためdeletedイベントを発行する(バッチ後も次回fetchまで古い行がキャッシュされ続けるのを防ぐ)
+				for (const orphan of orphans) {
+					this.globalEventService.publishInternalEvent('avatarDecorationDeleted', orphan);
+				}
+
+				totalDeleted += orphans.length;
+			}
+
+			// 保持期間内(取り込み処理と並行中の可能性あり)やバッチ上限で未削除の未参照行が残る場合は、
+			// 次回以降のジョブで処理できるようホストを再マークする
+			const pending = await this.avatarDecorationsRepository.createQueryBuilder('decoration')
+				.where('decoration.host = :host', { host })
+				.andWhere(NOT_REFERENCED_SQL)
+				.limit(1)
+				.getCount();
+			if (pending > 0) pendingHosts.push(host);
+		}
+
+		if (pendingHosts.length > 0) await this.redisClient.sadd(CLEANUP_HOSTS_REDIS_KEY, ...pendingHosts);
+
+		return totalDeleted;
 	}
 
 	@bindThis

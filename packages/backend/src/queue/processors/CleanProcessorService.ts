@@ -12,6 +12,7 @@ import { bindThis } from '@/decorators.js';
 import { IdService } from '@/core/IdService.js';
 import type { Config } from '@/config.js';
 import { ReversiService } from '@/core/ReversiService.js';
+import { AvatarDecorationService } from '@/core/AvatarDecorationService.js';
 import { QueueLoggerService } from '../QueueLoggerService.js';
 import type * as Bull from 'bullmq';
 
@@ -34,6 +35,7 @@ export class CleanProcessorService {
 
 		private queueLoggerService: QueueLoggerService,
 		private reversiService: ReversiService,
+		private avatarDecorationService: AvatarDecorationService,
 		private idService: IdService,
 	) {
 		this.logger = this.queueLoggerService.logger.createSubLogger('clean');
@@ -65,6 +67,13 @@ export class CleanProcessorService {
 			await this.roleAssignmentsRepository.delete({
 				id: In(expiredRoleAssignments.map(x => x.id)),
 			});
+		}
+
+		// リモートActor由来のアバターデコレーション定義行のうち、どのユーザーからも参照されなくなった孤児行を削除する
+		// (リモート配信側のコレクション変更・URL差し替えによる残骸の回収。行の増加自体はリモート由来の添付等と同様で仕様互換)
+		const cleanedRemoteDecorations = await this.avatarDecorationService.cleanUnusedRemoteDecorations();
+		if (cleanedRemoteDecorations > 0) {
+			this.logger.info(`Cleaned ${cleanedRemoteDecorations} unused remote avatar decorations`);
 		}
 
 		this.reversiService.cleanOutdatedGames();

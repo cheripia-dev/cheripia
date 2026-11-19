@@ -7,6 +7,7 @@ process.env.NODE_ENV = 'test';
 
 import { describe, beforeAll, beforeEach, test, expect } from 'vitest';
 import { Test } from '@nestjs/testing';
+import * as Redis from 'ioredis';
 
 import { MockResolver } from '../misc/mock-resolver.js';
 import { GlobalModule } from '@/GlobalModule.js';
@@ -29,6 +30,7 @@ describe('AvatarDecorationService', () => {
 	let avatarDecorationsRepository: AvatarDecorationsRepository;
 	let avatarDecorationService: AvatarDecorationService;
 	let apRendererService: ApRendererService;
+	let redisClient: Redis.Redis;
 	let resolver: MockResolver;
 
 	beforeAll(async () => {
@@ -43,6 +45,7 @@ describe('AvatarDecorationService', () => {
 		avatarDecorationsRepository = app.get<AvatarDecorationsRepository>(DI.avatarDecorationsRepository);
 		avatarDecorationService = app.get<AvatarDecorationService>(AvatarDecorationService);
 		apRendererService = app.get<ApRendererService>(ApRendererService);
+		redisClient = app.get<Redis.Redis>(DI.redis);
 		resolver = new MockResolver(await app.resolve<LoggerService>(LoggerService));
 	});
 
@@ -386,6 +389,111 @@ describe('AvatarDecorationService', () => {
 			expect(worn.offsetY).toBeCloseTo(-0.25);
 			expect(worn.scale).toBeCloseTo(1.2);
 			expect(worn.opacity).toBeCloseTo(0.5);
+		});
+	});
+
+	describe('cleanUnusedRemoteDecorations', () => {
+		const cleanupKey = 'avatarDecorationCleanup:hosts';
+		const oldTs = Date.now() - 1000 * 60 * 60 * 24 * 8;
+
+		async function insertDecorationRow(opts: { createdAt: number, host: string | null }): Promise<{ id: string }> {
+			const un = secureRndstr(8).toLowerCase();
+			return await avatarDecorationsRepository.insertOne({
+				id: genAidx(opts.createdAt),
+				url: `https://${opts.host ?? 'local.example'}/files/${un}.png`,
+				rawUrl: `https://${opts.host ?? 'local.example'}/files/${un}.png`,
+				name: 'gc deco',
+				description: '',
+				host: opts.host,
+				remoteId: null,
+			});
+		}
+
+		test('マーク済みホストのうち7日超でどのユーザーからも参照されていないremote行のみ削除し、使用中・作成直後・local行は残す', async () => {
+			await redisClient.del(cleanupKey);
+			const host = uniqueHost();
+
+			const wornRow = await insertDecorationRow({ createdAt: oldTs, host });
+			const orphanRow = await insertDecorationRow({ createdAt: oldTs, host });
+			const recentOrphanRow = await insertDecorationRow({ createdAt: Date.now(), host });
+			const localRow = await insertDecorationRow({ createdAt: oldTs, host: null });
+
+			// 誰か1人でも参照している共有定義行は削除対象外
+			const user = await createRemoteUser(host);
+			await usersRepository.update({ id: user.id }, {
+				avatarDecorations: [{ id: wornRow.id }],
+			});
+
+			await redisClient.sadd(cleanupKey, host);
+			const deletedCount = await avatarDecorationService.cleanUnusedRemoteDecorations();
+			expect(deletedCount).toBeGreaterThanOrEqual(1);
+
+			expect(await avatarDecorationsRepository.exists({ where: { id: orphanRow.id } })).toBe(false);
+			expect(await avatarDecorationsRepository.exists({ where: { id: wornRow.id } })).toBe(true);
+			expect(await avatarDecorationsRepository.exists({ where: { id: recentOrphanRow.id } })).toBe(true);
+			expect(await avatarDecorationsRepository.exists({ where: { id: localRow.id } })).toBe(true);
+		});
+
+		test('取り込み成功でマークされたホストはコレクション項目除去後の孤児行を後から削除できる(定義行自身は更新されないケース)', async () => {
+			await redisClient.del(cleanupKey);
+			const host = uniqueHost();
+			const staleRow = await insertDecorationRow({ createdAt: oldTs, host });
+
+			const user = await createRemoteUser(host);
+			await usersRepository.update({ id: user.id }, {
+				avatarDecorations: [{ id: staleRow.id }],
+			});
+
+			// 取り込み成功を模擬してホストをマークし、参照だけを外す(定義行は updatedAt を含む更新を受けない)
+			await redisClient.sadd(cleanupKey, host);
+			await usersRepository.update({ id: user.id }, { avatarDecorations: [] });
+
+			const deletedCount = await avatarDecorationService.cleanUnusedRemoteDecorations();
+			expect(deletedCount).toBeGreaterThanOrEqual(1);
+			expect(await avatarDecorationsRepository.exists({ where: { id: staleRow.id } })).toBe(false);
+			// 未参照行が残っていないホストは再マークされない
+			expect(await redisClient.smembers(cleanupKey)).not.toContain(host);
+		});
+
+		test('変更の無い(マークのない)ホストは7日超の孤児行でも削除しない', async () => {
+			await redisClient.del(cleanupKey);
+			const host = uniqueHost();
+			const orphanRow = await insertDecorationRow({ createdAt: oldTs, host });
+
+			const deletedCount = await avatarDecorationService.cleanUnusedRemoteDecorations();
+			expect(deletedCount).toBe(0);
+			expect(await avatarDecorationsRepository.exists({ where: { id: orphanRow.id } })).toBe(true);
+		});
+
+		test('保持期間内の未参照行が残るホストは次回以降のために再マークされる', async () => {
+			await redisClient.del(cleanupKey);
+			const host = uniqueHost();
+			const recentOrphanRow = await insertDecorationRow({ createdAt: Date.now(), host });
+
+			await redisClient.sadd(cleanupKey, host);
+			const deletedCount = await avatarDecorationService.cleanUnusedRemoteDecorations();
+			expect(deletedCount).toBe(0);
+			expect(await avatarDecorationsRepository.exists({ where: { id: recentOrphanRow.id } })).toBe(true);
+			expect(await redisClient.smembers(cleanupKey)).toContain(host);
+			await redisClient.del(cleanupKey);
+		});
+
+		test('idを持たない要素を含むavatarDecorationsがあっても孤児削除が空集合にならない', async () => {
+			await redisClient.del(cleanupKey);
+			const host = uniqueHost();
+			const orphanRow = await insertDecorationRow({ createdAt: oldTs, host });
+
+			// idキーの無い要素は ->> 'id' がNULLになり、NULL除外ガードが無ければNOT IN全体がunknownで空集合になり孤児行が消えない。
+			// 参考情報としてのNULLと、失敗経路でidが''になった空文字エントリを混ぜておく
+			const user = await createRemoteUser(host);
+			await usersRepository.update({ id: user.id }, {
+				avatarDecorations: [{} as { id: string }, { id: '' }],
+			});
+
+			await redisClient.sadd(cleanupKey, host);
+			const deletedCount = await avatarDecorationService.cleanUnusedRemoteDecorations();
+			expect(await avatarDecorationsRepository.exists({ where: { id: orphanRow.id } })).toBe(false);
+			expect(deletedCount).toBeGreaterThanOrEqual(1);
 		});
 	});
 });
