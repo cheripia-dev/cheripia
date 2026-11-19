@@ -16,7 +16,7 @@ import type { GlobalEvents } from '@/core/GlobalEventService.js';
 import { ModerationLogService } from '@/core/ModerationLogService.js';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
 import { appendQuery, query } from '@/misc/prelude/url.js';
-import { getApId, isDecoration } from '@/core/activitypub/type.js';
+import { getApId, isDecoration, tryGetApId } from '@/core/activitypub/type.js';
 import { toArray } from '@/misc/prelude/array.js';
 import { truncate } from '@/misc/truncate.js';
 import type { Resolver } from '@/core/activitypub/ApResolverService.js';
@@ -303,15 +303,31 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 
 		const collection = await resolver.resolveOrderedCollection(user.decorationsUri);
 
-		if (collection.id != null && new URL(getApId(collection.id)).origin !== new URL(user.uri).origin) {
-			return 'skip: collection origin mismatch';
+		// collection.id は連合先の未信頼 JSON。getApId/new URL が例外を投げないよう tryGetApId で解決する。
+		// id が在るのに解決・パースできない(数値・配列・相対URL等)場合は仕様に従わない応答として
+		// origin 不一致と同じ安全側でスキップし、id 欠落(null)は従来どおり検証不要で続行する
+		if (collection.id != null) {
+			const collectionId = tryGetApId(collection.id);
+			let collectionUrl: URL | null = null;
+			if (collectionId != null) {
+				try {
+					collectionUrl = new URL(collectionId);
+				} catch {
+					collectionUrl = null;
+				}
+			}
+			if (collectionUrl == null) return 'skip: invalid collection id';
+			if (collectionUrl.origin !== new URL(user.uri).origin) {
+				return 'skip: collection origin mismatch';
+			}
 		}
 
 		let items = collection.orderedItems;
 
 		if (items == null && collection.first != null) {
 			const page = await resolver.resolveOrderedCollectionPage(collection.first);
-			if (page.partOf == null || getApId(page.partOf) !== getApId(user.decorationsUri)) {
+			// partOf も未信頼 JSON。id が解決できないページはコレクション所属を検証できないため不一致扱いでスキップ
+			if (page.partOf == null || tryGetApId(page.partOf) !== tryGetApId(user.decorationsUri)) {
 				return 'skip: page partOf mismatch';
 			}
 			items = page.orderedItems ?? page.items;
@@ -354,15 +370,8 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 			const description = (typeof image === 'object' && typeof image.summary === 'string' ? image.summary : undefined) ??
 				(typeof item.summary === 'string' ? item.summary : undefined);
 
-			// getApIdはidが文字列idを持たない値(数値・配列等)の場合throwするため先にガードする
-			let apId: string | null = null;
-			if (item.id != null) {
-				try {
-					apId = getApId(item.id);
-				} catch {
-					apId = null;
-				}
-			}
+			// idが文字列idを持たない値(数値・配列等)の場合getApIdはthrowするためtryGetApIdで解決し、判定不能ならremoteIdなしで続行する
+			const apId = tryGetApId(item.id);
 
 			const decorationData = {
 				name: truncate(name, 256) ?? '',

@@ -68,6 +68,17 @@ export function getApId(value: string | IObject | undefined): string {
 }
 
 /**
+ * getApId の安全版。
+ * id を判定できない場合に throw せず null を返す。
+ * 連合先が返した未信頼 JSON を検証する箇所(数値・配列・形だけのオブジェクト等の id になり得る値)で使う。
+ */
+export function tryGetApId(value: string | IObject | undefined): string | null {
+	if (typeof value === 'string') return value;
+	if (value != null && typeof value.id === 'string') return value.id;
+	return null;
+}
+
+/**
  * Get ActivityStreams Object type
  *
  * タイプ判定ができなかった場合に、あえてエラーではなくnullを返すようにしている。

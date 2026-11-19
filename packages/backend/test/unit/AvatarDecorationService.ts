@@ -238,6 +238,58 @@ describe('AvatarDecorationService', () => {
 			expect(result).toBe('skip: collection origin mismatch');
 		});
 
+		test('collection.idが在るのに解決できない(数値id等)場合は例外にせずスキップする', async () => {
+			const host = uniqueHost();
+			const user = await createRemoteUser(host);
+			const decorationsUri = `${user.uri}/collections/decorations`;
+			resolver.register(decorationsUri, {
+				id: 123,
+				type: 'OrderedCollection',
+				orderedItems: [decorationItem(host)],
+			});
+
+			const result = await avatarDecorationService.remoteDecorationsFromAp({ ...user, decorationsUri }, resolver);
+			expect(result).toBe('skip: invalid collection id');
+
+			// 項目は処理されず定義行も作られない
+			const decorations = await avatarDecorationsRepository.findBy({ host });
+			expect(decorations).toHaveLength(0);
+		});
+
+		test('collection.idが相対URL(new URLが失敗)の場合はスキップする', async () => {
+			const host = uniqueHost();
+			const user = await createRemoteUser(host);
+			const decorationsUri = `${user.uri}/collections/decorations`;
+			resolver.register(decorationsUri, {
+				id: '/collections/decorations',
+				type: 'OrderedCollection',
+				orderedItems: [decorationItem(host)],
+			});
+
+			const result = await avatarDecorationService.remoteDecorationsFromAp({ ...user, decorationsUri }, resolver);
+			expect(result).toBe('skip: invalid collection id');
+		});
+
+		test('page.partOfが在るのに解決できない場合はスキップする(コレクション所属を検証できない)', async () => {
+			const host = uniqueHost();
+			const user = await createRemoteUser(host);
+			const decorationsUri = `${user.uri}/collections/decorations`;
+			resolver.register(decorationsUri, {
+				id: decorationsUri,
+				type: 'OrderedCollection',
+				first: `${decorationsUri}?page=true`,
+			});
+			resolver.register(`${decorationsUri}?page=true`, {
+				id: `${decorationsUri}?page=true`,
+				type: 'OrderedCollectionPage',
+				partOf: 123,
+				orderedItems: [decorationItem(host)],
+			});
+
+			const result = await avatarDecorationService.remoteDecorationsFromAp({ ...user, decorationsUri }, resolver);
+			expect(result).toBe('skip: page partOf mismatch');
+		});
+
 		test('空のOrderedCollection配信で既存の装備は解除される(remoteの表示状態は配信側が正)', async () => {
 			const host = uniqueHost();
 			const decoration = await avatarDecorationsRepository.insertOne({
