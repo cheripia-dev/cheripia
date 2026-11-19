@@ -17,6 +17,7 @@ import { ModerationLogService } from '@/core/ModerationLogService.js';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
 import { appendQuery, query } from '@/misc/prelude/url.js';
 import { getApId, isDecoration, tryGetApId } from '@/core/activitypub/type.js';
+import type { IObject } from '@/core/activitypub/type.js';
 import { toArray } from '@/misc/prelude/array.js';
 import { truncate } from '@/misc/truncate.js';
 import type { Resolver } from '@/core/activitypub/ApResolverService.js';
@@ -295,6 +296,8 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 	 * 取り込み時にjsonb保存単位の系(angleは回転比1=1周、offset/scaleは既定描画サイズ=アイコン一辺の2倍基準)へ逆変換する。
 	 * デコレーション定義の重複排除は(host, rawUrl=画像URL)キーで行う(旧API方式の(host, remoteId)キーとは別に管理される)。
 	 * rawUrlは無制限長のtextなのでDB上のインデックスは(host, md5(rawUrl))のハッシュ式インデックスで、検索もmd5()を適用して一致させる(models/AvatarDecoration.ts参照)。
+	 * 項目の解決(1st pass)とDB書き込み(2nd pass)を分離し、文字列URI項目の解決失敗が1件でもあれば
+	 * DBへ書き込む前に更新全体をスキップして既存装備を保持する(部分結果で上書きし装備を消失させない)。
 	 */
 	@bindThis
 	public async remoteDecorationsFromAp(user: MiUser, resolver: Resolver): Promise<string> {
@@ -333,16 +336,36 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 			items = page.orderedItems ?? page.items;
 		}
 
+		// 1st pass: 文字列URI項目をオブジェクトへ解決するだけ。DB書き込みは一切行わない
+		// (スキップになった回の他項目分の定義行が作られず、孤児行も発生しない)
+		// 装着数の上限はi/updateのアバターデコレーション上限(16)に合わせる
+		const resolvedItems: IObject[] = [];
+		let resolveFailures = 0;
+		for (const rawItem of toArray(items ?? []).slice(0, 16)) {
+			if (typeof rawItem !== 'string') {
+				// inline項目の配列要素がnull等の不正値内容は解決失敗に数えない(恒久的な不正がスキップで更新を止め続けるのを防ぐ)
+				if (rawItem != null) resolvedItems.push(rawItem);
+				continue;
+			}
+			// resolveのreject(通信・一時的障害)も解決不能なnull返却もどちらも失敗として計上する。
+			// 送信件側の削除と一時的障害を区別できないため安全側で失敗扱いにする
+			const resolved = await resolver.resolve(rawItem).catch(() => null);
+			if (resolved == null) resolveFailures++;
+			else resolvedItems.push(resolved);
+		}
+
+		// 解決失敗した項目が1件でもある場合、「送信件目が項目を外した」のか「一時的な解決失敗」なのかが区別できず、
+		// 解決できた部分だけの配列で上書きすると装備が消失する。よってDB書き込み前に更新全体をスキップし既存装備を保持する
+		// (コレクション取得自体の失敗が例外で上位に伝播しユーザーを更新しない挙動と整合。空コレクションは失敗0件なので従来どおり[]で解除)
+		if (resolveFailures > 0) return 'skip: partial resolve failed';
+
 		const userHost = user.host;
 		const updates = {} as Partial<MiUser>;
 		updates.avatarDecorations = [];
 
-		// 装着数の上限はi/updateのアバターデコレーション上限(16)に合わせる
-		for (const rawItem of toArray(items ?? []).slice(0, 16)) {
-			const item = typeof rawItem === 'string'
-				? await resolver.resolve(rawItem).catch(() => null)
-				: rawItem;
-			if (item == null || !isDecoration(item)) continue;
+		// 2nd pass: (host, md5(rawUrl))重複排除で定義行の作成/更新と装備情報の組み立て
+		for (const item of resolvedItems) {
+			if (!isDecoration(item)) continue;
 
 			// flipVは保存先が無い為未対応。required_propertiesに未対応プロパティが宣言されたitemは取り込まない
 			const supportedProperties = ['image', 'angle', 'flipH', 'offsetX', 'offsetY', 'scale', 'opacity'];

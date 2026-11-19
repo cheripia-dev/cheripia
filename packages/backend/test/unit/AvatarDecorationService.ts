@@ -375,6 +375,65 @@ describe('AvatarDecorationService', () => {
 			expect(afterChanged.name).toBe('shared-renamed');
 			expect(afterChanged.updatedAt?.getTime()).toBeGreaterThan(fixedUpdatedAt.getTime());
 		});
+
+		test('文字列URI項目の解決失敗が1件でもある場合は更新全体をスキップし既存装備を保持する(部分結果で上書きしない)', async () => {
+			const host = uniqueHost();
+			const decoration = await avatarDecorationsRepository.insertOne({
+				id: genAidx(Date.now()),
+				url: `https://${host}/files/equipped.png`,
+				rawUrl: `https://${host}/files/equipped.png`,
+				name: 'equipped',
+				description: '',
+				host,
+				remoteId: null,
+			});
+			const user = await createRemoteUser(host);
+			await usersRepository.update(user.id, { avatarDecorations: [{ id: decoration.id }] });
+
+			const decorationsUri = `${user.uri}/collections/decorations`;
+			resolver.register(decorationsUri, {
+				id: decorationsUri,
+				type: 'OrderedCollection',
+				orderedItems: [
+					decorationItem(host), // 有効なinline項目
+					`https://${host}/deco/unresolvable`, // mock未登録 -> 解決失敗
+				],
+			});
+
+			const result = await avatarDecorationService.remoteDecorationsFromAp({ ...user, decorationsUri }, resolver);
+			expect(result).toBe('skip: partial resolve failed');
+
+			// 装備は保持され、解決成功分だけの部分結果で上書きされない
+			const updated = await usersRepository.findOneByOrFail({ id: user.id });
+			expect(updated.avatarDecorations).toEqual([{ id: decoration.id }]);
+
+			// 1st passがDB書き込みより前なので、有効なinline項目も定義行として作られない(孤児行が発生しない)
+			const decorations = await avatarDecorationsRepository.findBy({ host });
+			expect(decorations).toHaveLength(1);
+			expect(decorations[0].id).toBe(decoration.id);
+		});
+
+		test('文字列URI項目がすべて解決できる場合は従来どおりokで取り込まれる', async () => {
+			const host = uniqueHost();
+			const user = await createRemoteUser(host);
+			const decorationsUri = `${user.uri}/collections/decorations`;
+			const referencedUrl = `https://${host}/deco/referenced`;
+			resolver.register(decorationsUri, {
+				id: decorationsUri,
+				type: 'OrderedCollection',
+				orderedItems: [
+					decorationItem(host),
+					referencedUrl,
+				],
+			});
+			resolver.register(referencedUrl, decorationItem(host));
+
+			const result = await avatarDecorationService.remoteDecorationsFromAp({ ...user, decorationsUri }, resolver);
+			expect(result).toBe('ok');
+
+			const updated = await usersRepository.findOneByOrFail({ id: user.id });
+			expect(updated.avatarDecorations).toHaveLength(2);
+		});
 	});
 
 	describe('renderDecorations', () => {
