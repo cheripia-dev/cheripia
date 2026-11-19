@@ -58,10 +58,19 @@ const REMOTE_DECORATION_CLEANUP_MAX_BATCHES_PER_HOST = 20;
 const CLEANUP_REFERENCED_IDS_TABLE = 'gc_avatar_decoration_referenced_ids';
 const NOT_REFERENCED_BY_HELPER_SQL = `NOT EXISTS (SELECT 1 FROM "${CLEANUP_REFERENCED_IDS_TABLE}" r WHERE r.id = decoration."id")`;
 
+// 参照id集合の展開はuser.idのキーセットページングでチャンク分割する。
+// 単一INSERTだと10万ユーザーで6.4秒かかり、プール接続のstatement_timeout(postgres.tsで10秒)に
+// ユーザー約16万規模で抵触しcleanジョブが落ち始める。2万ユーザー/チャンクなら
+// 1ステートメント約1.3秒で余裕を持ちつつ、総時間は線形なので変わらない。
+// (テストでチャンク境界の挙動を検証できるようフィールドにしてある)
+const CLEANUP_REFERENCED_CHUNK_USERS_DEFAULT = 20000;
+
 @Injectable()
 export class AvatarDecorationService implements OnApplicationShutdown {
 	public cache: MemorySingleCache<MiAvatarDecoration[]>;
 	public cacheRemote: MemorySingleCache<MiAvatarDecoration[]>;
+	// cleanUnusedRemoteDecorationsの参照id展開チャンクサイズ(ユーザー数)。テストで小さくできる
+	public cleanupReferencedChunkUsers = CLEANUP_REFERENCED_CHUNK_USERS_DEFAULT;
 
 	constructor(
 		@Inject(DI.config)
@@ -504,9 +513,29 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 		try {
 			await runner.query(`DROP TABLE IF EXISTS "${CLEANUP_REFERENCED_IDS_TABLE}"`);
 			await runner.query(`CREATE UNLOGGED TABLE "${CLEANUP_REFERENCED_IDS_TABLE}" (id text PRIMARY KEY)`);
-			await runner.query(`INSERT INTO "${CLEANUP_REFERENCED_IDS_TABLE}" (id)
-				SELECT DISTINCT elem ->> 'id' FROM "user" "u", jsonb_array_elements("u"."avatarDecorations") AS elem
-				WHERE (elem ->> 'id') IS NOT NULL`);
+
+			// 参照id集合をチャンク分割で展開する(単一INSERTでのstatement_timeout抵触回避)。
+			// チャンクをまたいで参照されるidはヘルパーテーブルの主キーに対するON CONFLICT DO NOTHINGで重複排除する。
+			// ループ中に追加されたユーザー(idは生成時刻順で末尾に積まれる)は後続チャンクで拾われる。
+			let lastUserId = '';
+			for (;;) {
+				await runner.query(`
+					INSERT INTO "${CLEANUP_REFERENCED_IDS_TABLE}" (id)
+					SELECT DISTINCT elem ->> 'id' FROM (
+						SELECT "u"."avatarDecorations" FROM "user" "u"
+						WHERE "u"."id" > $1 ORDER BY "u"."id" ASC LIMIT $2
+					) chunk, jsonb_array_elements(chunk."avatarDecorations") AS elem
+					WHERE (elem ->> 'id') IS NOT NULL
+					ON CONFLICT DO NOTHING`, [lastUserId, this.cleanupReferencedChunkUsers]);
+
+				const next = (await runner.query(`
+					SELECT max("chunk"."id") AS "id" FROM (
+						SELECT "u"."id" FROM "user" "u"
+						WHERE "u"."id" > $1 ORDER BY "u"."id" ASC LIMIT $2
+					) chunk`, [lastUserId, this.cleanupReferencedChunkUsers])) as { id: string | null }[];
+				if (next[0] == null || next[0].id == null) break;
+				lastUserId = next[0].id;
+			}
 
 			// 処理対象ホストを先にすべて取り出してから処理する。
 			// 処理中に再マークしたホストを同じ実行でspopし直すと、保持期間内の行があるホストで空回りするため

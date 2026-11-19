@@ -606,5 +606,40 @@ describe('AvatarDecorationService', () => {
 			expect(await avatarDecorationsRepository.exists({ where: { id: orphanRow.id } })).toBe(false);
 			expect(deletedCount).toBeGreaterThanOrEqual(1);
 		});
+
+		test('参照id展開がチャンク境界をまたいでも正しい: 先頭/中間/末尾チャンクの参照行は残り共有行も残り孤児行は消える', async () => {
+			await redisClient.del(cleanupKey);
+			const host = uniqueHost();
+
+			// チャンクを必ずまたぐ分页を強制する(7ユーザー×チャンク3=3チャンク)
+			const originalChunkSize = avatarDecorationService.cleanupReferencedChunkUsers;
+			avatarDecorationService.cleanupReferencedChunkUsers = 3;
+			try {
+				const users: MiUser[] = [];
+				for (let i = 0; i < 7; i++) users.push(await createRemoteUser(host));
+
+				// ユーザーidは生成順に単調増加なので users[0]=1チャンク目、users[3]=2チャンク目、users[6]=3チャンク目
+				const firstChunkRow = await insertDecorationRow({ createdAt: oldTs, host });
+				const midChunkRow = await insertDecorationRow({ createdAt: oldTs, host });
+				const lastChunkRow = await insertDecorationRow({ createdAt: oldTs, host });
+				const orphanRow = await insertDecorationRow({ createdAt: oldTs, host });
+
+				await usersRepository.update({ id: users[0].id }, { avatarDecorations: [{ id: firstChunkRow.id }] });
+				// 1チャンク目と3チャンク目にまたがって共有される行(ON CONFLICT DO NOTHINGで重複排除される)
+				await usersRepository.update({ id: users[6].id }, { avatarDecorations: [{ id: firstChunkRow.id }, { id: lastChunkRow.id }] });
+				await usersRepository.update({ id: users[3].id }, { avatarDecorations: [{ id: midChunkRow.id }] });
+
+				await redisClient.sadd(cleanupKey, host);
+				const deletedCount = await avatarDecorationService.cleanUnusedRemoteDecorations();
+
+				expect(await avatarDecorationsRepository.exists({ where: { id: orphanRow.id } })).toBe(false);
+				for (const row of [firstChunkRow, midChunkRow, lastChunkRow]) {
+					expect(await avatarDecorationsRepository.exists({ where: { id: row.id } })).toBe(true);
+				}
+				expect(deletedCount).toBeGreaterThanOrEqual(1);
+			} finally {
+				avatarDecorationService.cleanupReferencedChunkUsers = originalChunkSize;
+			}
+		});
 	});
 });
