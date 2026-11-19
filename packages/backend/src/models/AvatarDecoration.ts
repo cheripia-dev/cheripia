@@ -7,8 +7,13 @@ import { Entity, PrimaryColumn, Index, Column, ManyToOne, JoinColumn } from 'typ
 import { id } from './util/id.js';
 
 @Entity('avatar_decoration')
-// APub受信(remoteDecorationsFromAp)の重複排除が(host, rawUrl)で毎回検索するため、順次スキャンを避ける複合インデックス
-@Index(['host', 'rawUrl'])
+// APub受信(remoteDecorationsFromAp)の重複排除が(host, rawUrl)で毎回検索するため順次スキャンを避けるインデックスを付ける。
+// rawUrlは長さ無制限のtextで、(host, rawUrl)のままではbtreeのインデックス行サイズ上限(約2704バイト)を超える行が
+// CREATE INDEX / INSERT の失敗要因になるため、ハッシュ式インデックス(host, md5(rawUrl))にする。
+// 式インデックスはエンティティメタデータで表現できないので、IDX_EMOJI_ROLE_IDSと同様にsynchronize: falseで宣言し
+// 作成はハンドメイドmigration(1795021088953-AvatarDecorationHostRawUrlIndex.js)で行う。
+// 対応する検索はAvatarDecorationService.remoteDecorationsFromApでmd5()を適用して行っている
+@Index('IDX_avatar_decoration_host_raw_url_md5', { synchronize: false })
 export class MiAvatarDecoration {
 	@PrimaryColumn(id())
 	public id: string;

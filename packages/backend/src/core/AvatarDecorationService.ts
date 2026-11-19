@@ -294,6 +294,7 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 	 * 配信値の単位系はIApDecorationのコメント通りアイコン基準(angleはradian)なので、
 	 * 取り込み時にjsonb保存単位の系(angleは回転比1=1周、offset/scaleは既定描画サイズ=アイコン一辺の2倍基準)へ逆変換する。
 	 * デコレーション定義の重複排除は(host, rawUrl=画像URL)キーで行う(旧API方式の(host, remoteId)キーとは別に管理される)。
+	 * rawUrlは無制限長のtextなのでDB上のインデックスは(host, md5(rawUrl))のハッシュ式インデックスで、検索もmd5()を適用して一致させる(models/AvatarDecoration.ts参照)。
 	 */
 	@bindThis
 	public async remoteDecorationsFromAp(user: MiUser, resolver: Resolver): Promise<string> {
@@ -372,10 +373,12 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 				remoteId: apId != null && apId.length <= 32 ? apId : null,
 			};
 
-			const existingDecoration = await this.avatarDecorationsRepository.findOneBy({
-				host: userHost,
-				rawUrl: imageUrl,
-			});
+			// 重複排除検索は(host, md5(rawUrl))のハッシュ式インデックスに一致させるため、比較の両側でmd5()を適用する
+			// (生のrawUrl等値検索では式インデックスが使われない。NULLの扱いは元のfindOneBy等値検索と同一の意味: md5(NULL)=NULLは等値不成立)
+			const existingDecoration = await this.avatarDecorationsRepository.createQueryBuilder('decoration')
+				.where('decoration.host = :host', { host: userHost })
+				.andWhere('md5(decoration.rawUrl) = md5(:rawUrl)', { rawUrl: imageUrl })
+				.getOne();
 
 			let decorationId: string;
 			let changed = existingDecoration == null;
