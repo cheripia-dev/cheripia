@@ -5,7 +5,7 @@
 
 import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import * as Redis from 'ioredis';
-import { In, IsNull, Not } from 'typeorm';
+import { DataSource, In, IsNull, Not } from 'typeorm';
 import type { AvatarDecorationsRepository, InstancesRepository, UsersRepository, MiAvatarDecoration, MiUser } from '@/models/_.js';
 import { IdService } from '@/core/IdService.js';
 import { GlobalEventService } from '@/core/GlobalEventService.js';
@@ -51,12 +51,11 @@ const REMOTE_DECORATION_CLEANUP_BATCH_SIZE = 500;
 // ホスト1件あたりの削除バッチ数上限(到達時は未処理としてホストを再マークする)
 const REMOTE_DECORATION_CLEANUP_MAX_BATCHES_PER_HOST = 20;
 
-// 定義行idがどのユーザーのavatarDecorations(jsonb)からも参照されていないかの判定条件。
-// idキーの無い要素は ->> 'id' がNULLになり NOT IN 全体がunknownで空集合(=何も削除されない)になるためNULLを除外する
-const NOT_REFERENCED_SQL = `decoration."id" NOT IN (
-	SELECT elem ->> 'id' FROM "user" "u", jsonb_array_elements("u"."avatarDecorations") AS elem
-	WHERE "u"."avatarDecorations" <> '[]'::jsonb AND (elem ->> 'id') IS NOT NULL
-)`;
+// クリーンアップ実行中に「参照されている定義行id」の集合をmaterializeするヘルパーテーブル(UNLOGGED、実行ごとに作成/削除)。
+// 参照判定をインラインの副クエリにすると、ユーザーテーブル全スキャン+jsonb展開がクエリごとに再実行され、
+// 10万ユーザー・マーク済みホスト1000のベンチで1クエリ5.6秒×約4000クエリ=1実行約2時間になったため、実行中に1回だけ展開する
+const CLEANUP_REFERENCED_IDS_TABLE = 'gc_avatar_decoration_referenced_ids';
+const NOT_REFERENCED_BY_HELPER_SQL = `NOT EXISTS (SELECT 1 FROM "${CLEANUP_REFERENCED_IDS_TABLE}" r WHERE r.id = decoration."id")`;
 
 @Injectable()
 export class AvatarDecorationService implements OnApplicationShutdown {
@@ -72,6 +71,9 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 
 		@Inject(DI.redis)
 		private redisClient: Redis.Redis,
+
+		@Inject(DI.db)
+		private db: DataSource,
 
 		@Inject(DI.avatarDecorationsRepository)
 		private avatarDecorationsRepository: AvatarDecorationsRepository,
@@ -449,9 +451,8 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 	 * URLが差し替えられたりした旧定義行を明示的に削除しないため、放置すると未使用行が残り続ける。
 	 * 行が増えること自体はリモート由来の添付や投稿と同様に仕様互換なので上限は設けず、
 	 * 参照が切れた孤児行のみを保持期間(7日)経過後に削除する。
-	 * 対象はRedisセット(markHostForDecorationCleanup)でマークされたホストのみで、
-	 * 変更の無いホストはジョブから外す。マークはリモートユーザーの取り込み成功時のみ付与される。
-	 * 参照判定は全ユーザーのavatarDecorations(jsonb)のid集合に対する反対結合で行い、
+	 * 変更の無い(マークのない)ホストはジョブから外れる。マークはリモートユーザーの取り込み成功時のみ付与される。
+	 * 参照判定は、実行開始時に1回だけ展開する参照id集合のヘルパーテーブル(UNLOGGED)に対する反対結合で行い、
 	 * (host, rawUrl)キーで同一hostの複数ユーザーに共有された定義行は、参照しているユーザーが1人でもいれば削除されない。
 	 * ローカル行(hostがnull)は管理画面で管理者が運用する対象なので、ホストマークが付かないため対象外。
 	 * 保持期間内の未参照行が残ったホストは、次回以降のジョブで処理できるよう再マークする。
@@ -461,55 +462,71 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 	public async cleanUnusedRemoteDecorations(): Promise<number> {
 		const cutoff = this.idService.gen(Date.now() - REMOTE_DECORATION_CLEANUP_RETENTION_MS);
 
-		// 処理対象ホストを先にすべて取り出してから処理する。
-		// 処理中に再マークしたホストを同じ実行でspopし直すと、保持期間内の行があるホストで空回りするため
-		// 再マークは全ホストの処理後にまとめて行う
-		const hosts: string[] = [];
-		for (let popped = 0; popped < CLEANUP_MAX_HOSTS_PER_RUN;) {
-			const batch = await this.redisClient.spop(CLEANUP_HOSTS_REDIS_KEY, CLEANUP_HOSTS_POP_SIZE);
-			if (batch.length === 0) break;
-			hosts.push(...batch);
-			popped += batch.length;
-		}
+		// 実行中に1回だけ参照id集合をmaterializeする。
+		// インライン副クエリだとユーザーテーブル全スキャンがクエリごとに再実行され大規模インスタンスで破綻する(定数コメントのベンチ参照)。
+		// 定期cleanジョブはキュー経由で同時実行されないため固定テーブル名で良いが、異常終了で残っても次の実行冒頭で作り直す
+		const runner = this.db.createQueryRunner();
+		try {
+			await runner.query(`DROP TABLE IF EXISTS "${CLEANUP_REFERENCED_IDS_TABLE}"`);
+			await runner.query(`CREATE UNLOGGED TABLE "${CLEANUP_REFERENCED_IDS_TABLE}" (id text PRIMARY KEY)`);
+			await runner.query(`INSERT INTO "${CLEANUP_REFERENCED_IDS_TABLE}" (id)
+				SELECT DISTINCT elem ->> 'id' FROM "user" "u", jsonb_array_elements("u"."avatarDecorations") AS elem
+				WHERE (elem ->> 'id') IS NOT NULL`);
 
-		let totalDeleted = 0;
-		const pendingHosts: string[] = [];
-
-		for (const host of hosts) {
-			for (let batch = 0; batch < REMOTE_DECORATION_CLEANUP_MAX_BATCHES_PER_HOST; batch++) {
-				const orphans = await this.avatarDecorationsRepository.createQueryBuilder('decoration')
-					.where('decoration.host = :host', { host })
-					.andWhere('decoration.id < :cutoff', { cutoff })
-					.andWhere(NOT_REFERENCED_SQL)
-					.orderBy('decoration.id', 'ASC')
-					.limit(REMOTE_DECORATION_CLEANUP_BATCH_SIZE)
-					.getMany();
-
-				if (orphans.length === 0) break;
-
-				await this.avatarDecorationsRepository.delete({ id: In(orphans.map(x => x.id)) });
-
-				// 各プロセスのcacheRemoteを無効化するためdeletedイベントを発行する(バッチ後も次回fetchまで古い行がキャッシュされ続けるのを防ぐ)
-				for (const orphan of orphans) {
-					this.globalEventService.publishInternalEvent('avatarDecorationDeleted', orphan);
-				}
-
-				totalDeleted += orphans.length;
+			// 処理対象ホストを先にすべて取り出してから処理する。
+			// 処理中に再マークしたホストを同じ実行でspopし直すと、保持期間内の行があるホストで空回りするため
+			// 再マークは全ホストの処理後にまとめて行う
+			const hosts: string[] = [];
+			for (let popped = 0; popped < CLEANUP_MAX_HOSTS_PER_RUN;) {
+				const batch = await this.redisClient.spop(CLEANUP_HOSTS_REDIS_KEY, CLEANUP_HOSTS_POP_SIZE);
+				if (batch.length === 0) break;
+				hosts.push(...batch);
+				popped += batch.length;
 			}
 
-			// 保持期間内(取り込み処理と並行中の可能性あり)やバッチ上限で未削除の未参照行が残る場合は、
-			// 次回以降のジョブで処理できるようホストを再マークする
-			const pending = await this.avatarDecorationsRepository.createQueryBuilder('decoration')
-				.where('decoration.host = :host', { host })
-				.andWhere(NOT_REFERENCED_SQL)
-				.limit(1)
-				.getCount();
-			if (pending > 0) pendingHosts.push(host);
+			let totalDeleted = 0;
+			const pendingHosts: string[] = [];
+
+			for (const host of hosts) {
+				for (let batch = 0; batch < REMOTE_DECORATION_CLEANUP_MAX_BATCHES_PER_HOST; batch++) {
+					const orphans = await this.avatarDecorationsRepository.createQueryBuilder('decoration')
+						.where('decoration.host = :host', { host })
+						.andWhere('decoration.id < :cutoff', { cutoff })
+						.andWhere(NOT_REFERENCED_BY_HELPER_SQL)
+						.orderBy('decoration.id', 'ASC')
+						.limit(REMOTE_DECORATION_CLEANUP_BATCH_SIZE)
+						.getMany();
+
+					if (orphans.length === 0) break;
+
+					await this.avatarDecorationsRepository.delete({ id: In(orphans.map(x => x.id)) });
+
+					// 各プロセスのcacheRemoteを無効化するためdeletedイベントを発行する(バッチ後も次回fetchまで古い行がキャッシュされ続けるのを防ぐ)
+					for (const orphan of orphans) {
+						this.globalEventService.publishInternalEvent('avatarDecorationDeleted', orphan);
+					}
+
+					totalDeleted += orphans.length;
+				}
+
+				// 保持期間内(取り込み処理と並行中の可能性あり)やバッチ上限で未削除の未参照行が残る場合は、
+				// 次回以降のジョブで処理できるようホストを再マークする(LIMIT 1で存在確認のみ)
+				const pending = await this.avatarDecorationsRepository.createQueryBuilder('decoration')
+					.select('decoration.id', 'id')
+					.where('decoration.host = :host', { host })
+					.andWhere(NOT_REFERENCED_BY_HELPER_SQL)
+					.limit(1)
+					.getRawMany<{ id: string }>();
+				if (pending.length > 0) pendingHosts.push(host);
+			}
+
+			if (pendingHosts.length > 0) await this.redisClient.sadd(CLEANUP_HOSTS_REDIS_KEY, ...pendingHosts);
+
+			return totalDeleted;
+		} finally {
+			await runner.query(`DROP TABLE IF EXISTS "${CLEANUP_REFERENCED_IDS_TABLE}"`).catch(() => {});
+			await runner.release();
 		}
-
-		if (pendingHosts.length > 0) await this.redisClient.sadd(CLEANUP_HOSTS_REDIS_KEY, ...pendingHosts);
-
-		return totalDeleted;
 	}
 
 	@bindThis
