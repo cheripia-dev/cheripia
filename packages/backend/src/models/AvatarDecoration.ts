@@ -10,9 +10,15 @@ import { id } from './util/id.js';
 // APub受信(remoteDecorationsFromAp)の重複排除が(host, rawUrl)で毎回検索するため順次スキャンを避けるインデックスを付ける。
 // rawUrlは長さ無制限のtextで、(host, rawUrl)のままではbtreeのインデックス行サイズ上限(約2704バイト)を超える行が
 // CREATE INDEX / INSERT の失敗要因になるため、ハッシュ式インデックス(host, md5(rawUrl))にする。
+// インデックスはUNIQUEで、取り込みはON CONFLICT DO NOTHINGで挿入(createRemoteDecorationIfAbsent)するため、
+// 同一hostの複数ユーザーが同じ画像URLを同時に取り込んでも定義行は1行に収束する
+// (check-then-insertだと後発のSELECTが先発のコミット前に走るため重複行が作られる)。
+// hostがNULL(ローカル行)またはrawUrlがNULL(旧API方式(remoteUserUpdate)行)の行は、UNIQUEインデックスで
+// NULL同士が非一致になるため制約の対象外。
 // 式インデックスはエンティティメタデータで表現できないので、IDX_EMOJI_ROLE_IDSと同様にsynchronize: falseで宣言し
-// 作成はハンドメイドmigration(1795021088953-AvatarDecorationHostRawUrlIndex.js)で行う。
-// 対応する検索はAvatarDecorationService.remoteDecorationsFromApでmd5()を適用して行っている
+// 作成はハンドメイドmigrationで行う(1795021088953-AvatarDecorationHostRawUrlIndex.jsで作成、
+// 1795147371786-AvatarDecorationHostRawUrlUniqueIndex.jsで既存重複行を整理してUNIQUE化)。
+// 対応する検索はAvatarDecorationService.findRemoteDecorationByRawUrlでmd5()を適用して行っている
 @Index('IDX_avatar_decoration_host_raw_url_md5', { synchronize: false })
 export class MiAvatarDecoration {
 	@PrimaryColumn(id())

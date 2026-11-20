@@ -16,7 +16,7 @@ import type { GlobalEvents } from '@/core/GlobalEventService.js';
 import { ModerationLogService } from '@/core/ModerationLogService.js';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
 import { appendQuery, query } from '@/misc/prelude/url.js';
-import { getApId, isDecoration, tryGetApId } from '@/core/activitypub/type.js';
+import { isDecoration, tryGetApId } from '@/core/activitypub/type.js';
 import type { IObject } from '@/core/activitypub/type.js';
 import { toArray } from '@/misc/prelude/array.js';
 import { truncate } from '@/misc/truncate.js';
@@ -64,6 +64,10 @@ const NOT_REFERENCED_BY_HELPER_SQL = `NOT EXISTS (SELECT 1 FROM "${CLEANUP_REFER
 // 1ステートメント約1.3秒で余裕を持ちつつ、総時間は線形なので変わらない。
 // (テストでチャンク境界の挙動を検証できるようフィールドにしてある)
 const CLEANUP_REFERENCED_CHUNK_USERS_DEFAULT = 20000;
+
+// (host, rawUrl)をキーにリモート定義行の作成/取得をするヘルパーが受け取るペイロード。
+// hostとrawUrlはUNIQUEインデックスのキーなので必須
+type RemoteDecorationPayload = Omit<Partial<MiAvatarDecoration>, 'id' | 'host' | 'rawUrl'> & { host: string, rawUrl: string };
 
 @Injectable()
 export class AvatarDecorationService implements OnApplicationShutdown {
@@ -268,21 +272,20 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 				rawUrl: avatarDecoration.url,
 			};
 
-			if (existingDecoration == null) {
-				await this.create(decorationData);
-				this.cacheRemote.delete();
+			// (host, rawUrl)のUNIQUEインデックスにより、同一画像URLが別のremoteIdで登録されると挿入が競合する。
+			// その場合は既存行をそのまま参照する。定義行はそのhostの全ユーザーで共有されるため、
+			// 既存行のremoteIdは上書きしない(他ユーザーの参照行を壊す)
+			let definition = existingDecoration;
+			if (definition == null) {
+				definition = (await this.createRemoteDecorationIfAbsent(decorationData)).decoration;
+				if (definition == null) continue;
 			} else {
-				await this.update(existingDecoration.id, decorationData);
+				await this.update(definition.id, decorationData);
 				this.cacheRemote.delete();
 			}
 
-			const findDecoration = await this.avatarDecorationsRepository.findOneBy({
-				host: userHost,
-				remoteId: avatarDecorationId,
-			});
-
 			updates.avatarDecorations.push({
-				id: findDecoration?.id ?? '',
+				id: definition.id,
 				angle: avatarDecoration.angle ?? 0,
 				flipH: avatarDecoration.flipH ?? false,
 				offsetX: avatarDecoration.offsetX ?? 0,
@@ -299,12 +302,69 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 	}
 
 	/**
+	 * (host, rawUrl)でリモート定義行を検索する。
+	 * 検索は(host, md5(rawUrl))のハッシュ式インデックスに一致させるため、比較の両側でmd5()を適用する
+	 * (生のrawUrl等値検索では式インデックスが使われない。NULLの扱いはfindOneByの等値検索と同一の意味: md5(NULL)=NULLは等値不成立)。
+	 * インデックスはUNIQUEなので高々1行だが、重複が残りうる環境でも同じ行を選ぶようid昇順で取得する
+	 */
+	@bindThis
+	private findRemoteDecorationByRawUrl(host: string, rawUrl: string): Promise<MiAvatarDecoration | null> {
+		return this.avatarDecorationsRepository.createQueryBuilder('decoration')
+			.where('decoration.host = :host', { host })
+			.andWhere('md5(decoration.rawUrl) = md5(:rawUrl)', { rawUrl })
+			.orderBy('decoration.id', 'ASC')
+			.getOne();
+	}
+
+	/**
+	 * リモートデコレーション定義行を(host, rawUrl)キーで取得し、無ければ作成する。
+	 * 最初に検索し、既存が無かったときだけINSERT ... ON CONFLICT DO NOTHINGで作成する。
+	 * 検索だけを重複排除に使うと、同一(host, rawUrl)の並行取り込みで後発のSELECTが先発のコミット前に走るため
+	 * 両方が「既存なし」と判定して重複した定義行が作られる。挿入をON CONFLICT DO NOTHINGにすると、
+	 * 後発の挿入はUNIQUEインデックス(host, md5(rawUrl))で無視され、その後の検索は先発のコミット後に見えるので
+	 * 必ず1行に収束する。
+	 * 作成に成功した場合のみinserted=trueを返し、ここでavatarDecorationCreatedイベントとキャッシュ破棄を発行する。
+	 * 競合直後に行が消えた等の稀なケースでは最大3回まで再試行し、取得できなければdecorationをnullで返す
+	 * (呼び出し側はその項目をスキップする。例外は投げない)
+	 */
+	@bindThis
+	private async createRemoteDecorationIfAbsent(data: RemoteDecorationPayload): Promise<{ decoration: MiAvatarDecoration | null, inserted: boolean }> {
+		const found = await this.findRemoteDecorationByRawUrl(data.host, data.rawUrl);
+		if (found != null) return { decoration: found, inserted: false };
+
+		for (let attempt = 0; attempt < 3; attempt++) {
+			const insertResult = await this.avatarDecorationsRepository.createQueryBuilder()
+				.insert()
+				.values({ id: this.idService.gen(), ...data })
+				.orIgnore(true)
+				.returning(['id'])
+				.execute();
+
+			const insertedIds = insertResult.raw as { id: string }[];
+			if (insertedIds.length > 0) {
+				const created = await this.avatarDecorationsRepository.findOneBy({ id: insertedIds[0].id });
+				if (created != null) {
+					this.globalEventService.publishInternalEvent('avatarDecorationCreated', created);
+					this.cacheRemote.delete();
+					return { decoration: created, inserted: true };
+				}
+			}
+
+			const existing = await this.findRemoteDecorationByRawUrl(data.host, data.rawUrl);
+			if (existing != null) return { decoration: existing, inserted: false };
+		}
+
+		return { decoration: null, inserted: false };
+	}
+
+	/**
 	 * Actorに公開されたOrderedCollection(decorationsUri)からリモートアバターデコレーションを取り込む。
 	 * 配信側はorderedItemsにitemをinlineで載せるが、firstページ参照形にも一応対応する。
 	 * 配信値の単位系はIApDecorationのコメント通りアイコン基準(angleはradian)なので、
 	 * 取り込み時にjsonb保存単位の系(angleは回転比1=1周、offset/scaleは既定描画サイズ=アイコン一辺の2倍基準)へ逆変換する。
 	 * デコレーション定義の重複排除は(host, rawUrl=画像URL)キーで行う(旧API方式の(host, remoteId)キーとは別に管理される)。
-	 * rawUrlは無制限長のtextなのでDB上のインデックスは(host, md5(rawUrl))のハッシュ式インデックスで、検索もmd5()を適用して一致させる(models/AvatarDecoration.ts参照)。
+	 * rawUrlは無制限長のtextなのでDB上のインデックスは(host, md5(rawUrl))のUNIQUEハッシュ式インデックスで、検索もmd5()を適用して一致させる。
+	 * 定義行の作成はON CONFLICT DO NOTHING(createRemoteDecorationIfAbsent)なので、並行取り込みで重複行が作られない(models/AvatarDecoration.ts参照)。
 	 * 項目の解決(1st pass)とDB書き込み(2nd pass)を分離し、文字列URI項目の解決失敗が1件でもあれば
 	 * DBへ書き込む前に更新全体をスキップして既存装備を保持する(部分結果で上書きし装備を消失させない)。
 	 */
@@ -414,34 +474,29 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 				remoteId: apId != null && apId.length <= 32 ? apId : null,
 			};
 
-			// 重複排除検索は(host, md5(rawUrl))のハッシュ式インデックスに一致させるため、比較の両側でmd5()を適用する
-			// (生のrawUrl等値検索では式インデックスが使われない。NULLの扱いは元のfindOneBy等値検索と同一の意味: md5(NULL)=NULLは等値不成立)
-			const existingDecoration = await this.avatarDecorationsRepository.createQueryBuilder('decoration')
-				.where('decoration.host = :host', { host: userHost })
-				.andWhere('md5(decoration.rawUrl) = md5(:rawUrl)', { rawUrl: imageUrl })
-				.getOne();
+			// 定義行の取得と作成は1つのヘルパー(createRemoteDecorationIfAbsent)で行う。
+			// 挿入は(host, md5(rawUrl))UNIQUEインデックスに対するON CONFLICT DO NOTHINGなので、
+			// 同一hostの並行アクター更新は重複行を作らず必ず1行に収束する(models/AvatarDecoration.ts参照)
+			const { decoration, inserted } = await this.createRemoteDecorationIfAbsent(decorationData);
+			if (decoration == null) continue;
 
-			let decorationId: string;
-			let changed = existingDecoration == null;
-			if (existingDecoration == null) {
-				const created = await this.create(decorationData);
-				decorationId = created.id;
-			} else {
+			if (!inserted) {
 				// 定義行は(host, rawUrl)で同一hostの複数ユーザーに共有されるため、差分が無い行への
 				// 無意味なUPDATE(updatedAt書き換え+全プロセス向けのcache invalidate event)をスキップする
-				changed =
-					decorationData.name !== existingDecoration.name ||
-					decorationData.description !== existingDecoration.description ||
-					decorationData.url !== existingDecoration.url ||
-					decorationData.remoteId !== existingDecoration.remoteId;
-				if (changed) await this.update(existingDecoration.id, decorationData);
-				decorationId = existingDecoration.id;
+				const changed =
+					decorationData.name !== decoration.name ||
+					decorationData.description !== decoration.description ||
+					decorationData.url !== decoration.url ||
+					decorationData.remoteId !== decoration.remoteId;
+				if (changed) {
+					await this.update(decoration.id, decorationData);
+					this.cacheRemote.delete();
+				}
 			}
-			if (changed) this.cacheRemote.delete();
 
 			const rawAngle = toFiniteNumber(item.angle, 0) / (Math.PI * 2);
 			updates.avatarDecorations.push({
-				id: decorationId,
+				id: decoration.id,
 				// angle は1周周期で正規化してから保存(i/updateの保存可能域[-0.5, 0.5]に揃える)
 				angle: rawAngle - Math.round(rawAngle),
 				flipH: item.flipH === true,
@@ -498,6 +553,11 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 	 * 変更の無い(マークのない)ホストはジョブから外れる。マークはリモートユーザーの取り込み成功時のみ付与される。
 	 * 参照判定は、実行開始時に1回だけ展開する参照id集合のヘルパーテーブル(UNLOGGED)に対する反対結合で行い、
 	 * (host, rawUrl)キーで同一hostの複数ユーザーに共有された定義行は、参照しているユーザーが1人でもいれば削除されない。
+	 * 参照id集合は実行開始時点のスナップショットなので、実行中に保持期間超の行が改めて参照された場合、参照された直後に
+	 * 削除され得る(窓は実行時間分。10万ユーザーで数秒)。削除されたidはuser.avatarDecorationsに残るが、
+	 * UserEntityServiceは存在しないidを黙って除外するため、影響は次回アクター更新までそのユーザーのデコレーションが
+	 * 表示されないことに留まる。バッチごとに現在の参照集合を再確認するとユーザーテーブル全行のjsonb展開を
+	 * バッチ数分繰り返すことになり、ヘルパーテーブルで回避したはずのコストが戻るため、この競合は意図的に許容している。
 	 * ローカル行(hostがnull)は管理画面で管理者が運用する対象なので、ホストマークが付かないため対象外。
 	 * 保持期間内の未参照行が残ったホストは、次回以降のジョブで処理できるよう再マークする。
 	 * @returns 削除した行数
@@ -552,6 +612,7 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 			const pendingHosts: string[] = [];
 
 			for (const host of hosts) {
+				let deletedInHost = 0;
 				for (let batch = 0; batch < REMOTE_DECORATION_CLEANUP_MAX_BATCHES_PER_HOST; batch++) {
 					const orphans = await this.avatarDecorationsRepository.createQueryBuilder('decoration')
 						.where('decoration.host = :host', { host })
@@ -565,13 +626,15 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 
 					await this.avatarDecorationsRepository.delete({ id: In(orphans.map(x => x.id)) });
 
-					// 各プロセスのcacheRemoteを無効化するためdeletedイベントを発行する(バッチ後も次回fetchまで古い行がキャッシュされ続けるのを防ぐ)
-					for (const orphan of orphans) {
-						this.globalEventService.publishInternalEvent('avatarDecorationDeleted', orphan);
-					}
-
 					totalDeleted += orphans.length;
+					deletedInHost += orphans.length;
 				}
+
+				// 各プロセスのcacheRemoteを無効化するためdeletedイベントを発行する(実行後の古いキャッシュを破棄する)。
+				// 購読側(AvatarDecorationService.onMessage)はpayloadを読まずキャッシュ破棄だけするので、
+				// 削除行数に関わらずホスト単位で1回発行すれば行ごとに発行したのと同じ効果がある。
+				// 行ごとに発行すると1実行で最大1000万件(CLEANUP_MAX_HOSTS_PER_RUN × バッチ上限 × バッチサイズ)のRedis PUBLISHになる
+				if (deletedInHost > 0) this.globalEventService.publishInternalEvent('avatarDecorationDeleted');
 
 				// 保持期間内(取り込み処理と並行中の可能性あり)やバッチ上限で未削除の未参照行が残る場合は、
 				// 次回以降のジョブで処理できるようホストを再マークする(LIMIT 1で存在確認のみ)

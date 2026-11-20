@@ -40,7 +40,7 @@ import { DriveFileEntityService } from '@/core/entities/DriveFileEntityService.j
 import type { AccountMoveService } from '@/core/AccountMoveService.js';
 import { checkHttps } from '@/misc/check-https.js';
 import { AvatarDecorationService } from '@/core/AvatarDecorationService.js';
-import { getApId, getApType, getOneApHrefNullable, isActor, isCollection, isCollectionOrOrderedCollection, isPost, isPropertyValue } from '../type.js';
+import { getApId, getApType, getOneApHrefNullable, isActor, isCollection, isCollectionOrOrderedCollection, isPost, isPropertyValue, tryGetApId } from '../type.js';
 import { parseSearchableByFromTags, parseSearchableByFromProperty } from '../misc/searchableBy.js';
 import { extractApHashtags } from './tag.js';
 import type { OnModuleInit } from '@nestjs/common';
@@ -477,7 +477,7 @@ export class ApPersonService implements OnModuleInit {
 					isSquareAvatars: person.isSquareAvatars,
 					canChat: (person as any)._misskey_canChat ?? true,
 					clipsUri: person._yojoart_clips ? getApId(person._yojoart_clips) : person.playlists ? getApId(person.playlists) : undefined,
-					decorationsUri: person._yojoart_decorations ? getApId(person._yojoart_decorations) : undefined,
+					decorationsUri: tryGetApId(person._yojoart_decorations) ?? undefined,
 				})) as MiRemoteUser;
 
 				let _description: string | null = null;
@@ -776,7 +776,7 @@ export class ApPersonService implements OnModuleInit {
 			clipsUri: person._yojoart_clips ?? person.playlists,
 			...(await this.resolveAvatarAndBanner(exist, person.icon, person.image, role_policy).catch(() => ({}))),
 			...(channelId ? { channelId } : {}),
-			decorationsUri: person._yojoart_decorations ? getApId(person._yojoart_decorations) : undefined,
+			decorationsUri: tryGetApId(person._yojoart_decorations) ?? undefined,
 		} as Partial<MiRemoteUser> & Pick<MiRemoteUser, 'isBot' | 'isCat' | 'isLocked' | 'movedToUri' | 'alsoKnownAs' | 'isExplorable'>;
 
 		const moving = ((): boolean => {

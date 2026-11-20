@@ -8,6 +8,7 @@ process.env.NODE_ENV = 'test';
 import { describe, beforeAll, beforeEach, test, expect } from 'vitest';
 import { Test } from '@nestjs/testing';
 import * as Redis from 'ioredis';
+import type { DataSource } from 'typeorm';
 
 import { MockResolver } from '../misc/mock-resolver.js';
 import { GlobalModule } from '@/GlobalModule.js';
@@ -32,6 +33,7 @@ describe('AvatarDecorationService', () => {
 	let apRendererService: ApRendererService;
 	let redisClient: Redis.Redis;
 	let resolver: MockResolver;
+	let db: DataSource;
 
 	beforeAll(async () => {
 		const app = await Test.createTestingModule({
@@ -47,6 +49,7 @@ describe('AvatarDecorationService', () => {
 		apRendererService = app.get<ApRendererService>(ApRendererService);
 		redisClient = app.get<Redis.Redis>(DI.redis);
 		resolver = new MockResolver(await app.resolve<LoggerService>(LoggerService));
+		db = app.get<DataSource>(DI.db);
 	});
 
 	beforeEach(() => {
@@ -433,6 +436,117 @@ describe('AvatarDecorationService', () => {
 
 			const updated = await usersRepository.findOneByOrFail({ id: user.id });
 			expect(updated.avatarDecorations).toHaveLength(2);
+		});
+	});
+
+	describe('remoteDecorationsFromApの定義行重複排除', () => {
+		// テストDBのスキーマはsynchronizeで構築されるため、ハンドメイドの式インデックスは存在しない。
+		// このテスト内でのみ、テスト用hostに限定したUNIQUE式インデックスを作成して
+		// 本番のON CONFLICT DO NOTHINGと同じ挙動を再現し、後片付けで削除する
+		// (hostはsecureRndstr由来の英数と'.test'のみで構成されるのでリテラル埋め込みは安全)
+		test('同一hostで同じ画像URLを並行取り込みすると定義行が1行に収束する', async () => {
+			const host = uniqueHost();
+			const indexName = `test_uq_ad_host_raw_md5_${secureRndstr(6).toLowerCase()}`;
+			await avatarDecorationsRepository.query(`CREATE UNIQUE INDEX "${indexName}" ON "avatar_decoration" ("host", md5("rawUrl")) WHERE "host" = '${host}'`);
+
+			try {
+				const imageUrl = `https://${host}/files/shared.png`;
+				const userA = await createRemoteUser(host);
+				const userB = await createRemoteUser(host);
+				const uriA = `${userA.uri}/collections/decorations`;
+				const uriB = `${userB.uri}/collections/decorations`;
+				for (const uri of [uriA, uriB]) {
+					resolver.register(uri, {
+						id: uri,
+						type: 'OrderedCollection',
+						orderedItems: [decorationItem(host, {
+							image: { type: 'Image', url: imageUrl, name: 'shared deco', summary: 'shared desc' },
+						})],
+					});
+				}
+
+				// 同一hostの2ユーザーが同じ画像URLを同時に取り込む。定義行は(host, rawUrl)で共有されるため
+				// 後発は自前の行を作らず先発の行を参照し、1行に収束する
+				// (先発のコミット前にSELECTが走る場面=ON CONFLICT DO NOTHINGが必要な場面は下のSQL検証で確認する)
+				const results = await Promise.all([
+					avatarDecorationService.remoteDecorationsFromAp({ ...userA, decorationsUri: uriA }, resolver),
+					avatarDecorationService.remoteDecorationsFromAp({ ...userB, decorationsUri: uriB }, resolver),
+				]);
+				expect(results).toEqual(['ok', 'ok']);
+
+				const rows = await avatarDecorationsRepository.findBy({ host });
+				expect(rows).toHaveLength(1);
+
+				for (const userId of [userA.id, userB.id]) {
+					const updated = await usersRepository.findOneByOrFail({ id: userId });
+					expect(updated.avatarDecorations).toHaveLength(1);
+					expect(updated.avatarDecorations[0].id).toBe(rows[0].id);
+				}
+			} finally {
+				await avatarDecorationsRepository.query(`DROP INDEX IF EXISTS "${indexName}"`);
+			}
+		});
+
+		// (host, rawUrl)の重複作成を防ぐ仕組みそのものを検証する。
+		// check-then-insertの競合窓は「後発のSELECTが先発の行を見ないが、後発のINSERTは先発の行と実衝突する」
+		// という同時実行でしか起きないので、アプリと同じREAD COMMITTEDのトランザクションで
+		// SELECT(既存なし) -> 別接続の挿入コミット -> INSERT の順を確定させて再現する
+		test('後発のSELECTが見えない先行行への挿入は、ON CONFLICTなしだとunique_violationになりON CONFLICT DO NOTHINGなら0行で無視される', async () => {
+			const host = uniqueHost();
+			const indexName = `test_uq_ad_host_raw_md5_${secureRndstr(6).toLowerCase()}`;
+			const rawUrl = `https://${host}/files/dup.png`;
+			await avatarDecorationsRepository.query(`CREATE UNIQUE INDEX "${indexName}" ON "avatar_decoration" ("host", md5("rawUrl")) WHERE "host" = '${host}'`);
+
+			const findSql = `SELECT "id" FROM "avatar_decoration" WHERE "host" = $1 AND md5("rawUrl") = md5($2)`;
+			const insertSql = `INSERT INTO "avatar_decoration" ("id", "url", "name", "description", "host", "rawUrl") VALUES ($1, $2, $3, $4, $5, $6)`;
+
+			const runner = db.createQueryRunner();
+			await runner.connect();
+			try {
+				await runner.startTransaction();
+				// 先発の行が無い時点で定義行検索(check-then-insertのSELECT)が走る
+				expect(await runner.query(findSql, [host, rawUrl])).toHaveLength(0);
+
+				// その後に別接続(他のワーカー相当)が同じ(host, rawUrl)の行をコミットする
+				await avatarDecorationsRepository.insertOne({
+					id: genAidx(Date.now()),
+					url: rawUrl,
+					rawUrl,
+					name: 'gc deco',
+					description: '',
+					host,
+					remoteId: null,
+				});
+
+				// 1つの文の失敗でトランザクション全体がabortedになると後続の文が打てないため、
+				// 失敗させる検証はSAVEPOINTで囲む
+				await runner.query('SAVEPOINT check_plain_insert');
+				let plainInsertErrorCode: string | undefined;
+				try {
+					// ON CONFLICTなし(check-then-insertのINSERT)はunique_violationで、アクター更新が例外終了する
+					await runner.query(insertSql, [genAidx(Date.now()), rawUrl, rawUrl, 'gc deco', host, rawUrl]);
+				} catch (e) {
+					plainInsertErrorCode = (e as { driverError?: { code?: string } }).driverError?.code;
+				}
+				await runner.query('ROLLBACK TO SAVEPOINT check_plain_insert');
+				expect(plainInsertErrorCode).toBe('23505');
+
+				// ヘルパー(createRemoteDecorationIfAbsent)と同じ挿入形は例外を投げず、行も増えない
+				const ignored = await runner.query(`${insertSql} ON CONFLICT DO NOTHING RETURNING "id"`, [genAidx(Date.now()), rawUrl, rawUrl, 'gc deco', host, rawUrl]);
+				expect(ignored).toHaveLength(0);
+
+				// READ COMMITTEDのステートメントスナップショットなので、ヘルパーの再検索は先発の行を取得できる
+				expect(await runner.query(findSql, [host, rawUrl])).toHaveLength(1);
+
+				await runner.rollbackTransaction();
+			} finally {
+				// 検証側で例外になるとプール接続がabortedトランザクションのまま返却され、
+				// 後続テストが全滅するため必ずロールバックしてから解放する
+				await runner.rollbackTransaction().catch(() => {});
+				await runner.release();
+				await avatarDecorationsRepository.query(`DROP INDEX IF EXISTS "${indexName}"`);
+				await avatarDecorationsRepository.delete({ host });
+			}
 		});
 	});
 
