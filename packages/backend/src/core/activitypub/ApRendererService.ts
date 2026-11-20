@@ -32,11 +32,12 @@ import { escapeHtml } from '@/misc/escape-html.js';
 import { RoleService } from '@/core/RoleService.js';
 import { searchableTypes } from '@/types.js';
 import { isPureRenote } from '../entities/NoteEntityService.js';
+import { AvatarDecorationService } from '../AvatarDecorationService.js';
 import { JsonLdService } from './JsonLdService.js';
 import { ApMfmService } from './ApMfmService.js';
 import { CONTEXT } from './misc/contexts.js';
 import { toSerchableByProperty } from './misc/searchableBy.js';
-import type { IAccept, IActivity, IAdd, IAnnounce, IApDocument, IApEmoji, IApHashtag, IApImage, IApMention, IApReversi, IBlock, IClip, ICreate, IDelete, IFlag, IFollow, IInvite, IJoin, IKey, ILeave, ILike, IMove, IObject, IOrderedCollection, IPost, IQuestion, IRead, IReject, IRemove, ITombstone, IUndo, IUpdate } from './type.js';
+import type { IAccept, IActivity, IAdd, IAnnounce, IApDecoration, IApDocument, IApEmoji, IApHashtag, IApImage, IApMention, IApReversi, IBlock, IClip, ICreate, IDelete, IFlag, IFollow, IInvite, IJoin, IKey, ILeave, ILike, IMove, IObject, IOrderedCollection, IPost, IQuestion, IRead, IReject, IRemove, ITombstone, IUndo, IUpdate } from './type.js';
 
 @Injectable()
 export class ApRendererService {
@@ -78,6 +79,7 @@ export class ApRendererService {
 		private idService: IdService,
 		private utilityService: UtilityService,
 		private roleService: RoleService,
+		private avatarDecorationService: AvatarDecorationService,
 	) {
 	}
 
@@ -447,6 +449,40 @@ export class ApRendererService {
 	}
 
 	@bindThis
+	public async renderDecorations(user: MiUser): Promise<IApDecoration[]> {
+		if (user.avatarDecorations.length <= 0) return [];
+		const instanceDecorations = await this.avatarDecorationService.getAll((user.host === null) ? 'local' : 'remoteOnly', false);
+		const activeUserDecorations = instanceDecorations.filter(deco => user.avatarDecorations.some(d => d.id === deco.id));
+		return user.avatarDecorations.map(ud => {
+			const instance = activeUserDecorations.find(d => d.id === ud.id) ?? null;
+			const url = instance?.rawUrl ?? instance?.url;
+			return {
+				instance,
+				url,
+				...ud,
+			};
+		}).filter(ud => ud.instance != null).map(ud => ({
+			type: 'Decoration',
+			required_properties: [],
+			image: ud.url ? {
+				type: 'Image',
+				url: ud.url,
+				sensitive: false,
+				name: ud.instance?.name,
+				summary: ud.instance?.description,
+			} : undefined,
+			// jsonb保存値の単位系(angle: 回転比 1=360°, offset/scale: デコレーション既定描画サイズ=アイコン一辺の2倍基準)を、
+			// IApDecorationのコメント基準(アイコン基準・radian)へ変換して配信する
+			angle: ud.angle != null ? ud.angle * Math.PI * 2 : undefined, //radian
+			flipV: undefined, //上下反転
+			flipH: ud.flipH ?? undefined, //左右反転
+			offsetX: ud.offsetX != null ? ud.offsetX * 2 : undefined, //アイコンの幅を基準に、そのn倍右側に移動させる
+			offsetY: ud.offsetY != null ? ud.offsetY * 2 : undefined, //アイコンの高さを基準に、そのn倍下側に移動させる
+			scale: ud.scale != null ? ud.scale * 2 : undefined, //アイコンのサイズを基準に、そのn倍で描画
+			opacity: ud.opacity ?? undefined, //不透明度
+		} as IApDecoration));
+	}
+	@bindThis
 	public renderClip(clip: MiClip): IClip {
 		const rendered = {
 			type: 'Clip',
@@ -792,6 +828,7 @@ export class ApRendererService {
 			isSquareAvatars: user.isSquareAvatars ?? undefined,
 			_yojoart_clips: `${id}/collections/clips`,
 			...(channel?.userId ? { attributedTo: this.userEntityService.genLocalUserUri(channel.userId) } : {} ),
+			_yojoart_decorations: `${id}/collections/decorations`,
 		};
 
 		if (user.movedToUri) {

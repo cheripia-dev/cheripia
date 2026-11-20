@@ -40,7 +40,7 @@ import { DriveFileEntityService } from '@/core/entities/DriveFileEntityService.j
 import type { AccountMoveService } from '@/core/AccountMoveService.js';
 import { checkHttps } from '@/misc/check-https.js';
 import { AvatarDecorationService } from '@/core/AvatarDecorationService.js';
-import { getApId, getApType, getOneApHrefNullable, isActor, isCollection, isCollectionOrOrderedCollection, isPost, isPropertyValue } from '../type.js';
+import { getApId, getApType, getOneApHrefNullable, isActor, isCollection, isCollectionOrOrderedCollection, isPost, isPropertyValue, tryGetApId } from '../type.js';
 import { parseSearchableByFromTags, parseSearchableByFromProperty } from '../misc/searchableBy.js';
 import { extractApHashtags } from './tag.js';
 import type { OnModuleInit } from '@nestjs/common';
@@ -477,6 +477,7 @@ export class ApPersonService implements OnModuleInit {
 					isSquareAvatars: person.isSquareAvatars,
 					canChat: (person as any)._misskey_canChat ?? true,
 					clipsUri: person._yojoart_clips ? getApId(person._yojoart_clips) : person.playlists ? getApId(person.playlists) : undefined,
+					decorationsUri: tryGetApId(person._yojoart_decorations) ?? undefined,
 				})) as MiRemoteUser;
 
 				let _description: string | null = null;
@@ -591,6 +592,7 @@ export class ApPersonService implements OnModuleInit {
 
 		await this.updateFeatured(user.id, resolver).catch(err => this.logger.error(err));
 		await this.apClipService.updateUserClips(user.id, resolver).catch(err => this.logger.error(err));
+		await this.avatarDecorationService.remoteDecorationsFromAp(user, resolver).catch(err => this.logger.error(err));
 
 		return user;
 	}
@@ -774,6 +776,7 @@ export class ApPersonService implements OnModuleInit {
 			clipsUri: person._yojoart_clips ?? person.playlists,
 			...(await this.resolveAvatarAndBanner(exist, person.icon, person.image, role_policy).catch(() => ({}))),
 			...(channelId ? { channelId } : {}),
+			decorationsUri: tryGetApId(person._yojoart_decorations) ?? undefined,
 		} as Partial<MiRemoteUser> & Pick<MiRemoteUser, 'isBot' | 'isCat' | 'isLocked' | 'movedToUri' | 'alsoKnownAs' | 'isExplorable'>;
 
 		const moving = ((): boolean => {
@@ -797,12 +800,12 @@ export class ApPersonService implements OnModuleInit {
 		if (moving) updates.movedAt = new Date();
 
 		// Update user
-		const user = await this.usersRepository.findOneByOrFail({ id: exist.id });
-		await this.avatarDecorationService.remoteUserUpdate(user);
-
 		if (!(await this.usersRepository.update({ id: exist.id, isDeleted: false }, updates)).affected) {
 			return 'skip';
 		}
+
+		// リモートアバターデコレーションはActorのOrderedCollection(decorationsUri)優先で取り込み、無ければ旧API方式にフォールバック
+		await this.avatarDecorationService.remoteUserUpdate({ ...exist, ...updates }, resolver).catch(err => this.logger.error(err));
 
 		if (person.publicKey) {
 			await this.userPublickeysRepository.update({ userId: exist.id }, {

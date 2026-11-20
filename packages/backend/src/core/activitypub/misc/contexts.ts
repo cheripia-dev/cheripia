@@ -577,6 +577,16 @@ const extension_context_definition = {
 	'banner': 'yojoart:banner',
 	'Game': 'yojoart:Game',
 	'_yojoart_clips': 'yojoart:_yojoart_clips',
+	'_yojoart_decorations': 'yojoart:_yojoart_decorations',
+	'Decoration': 'yojoart:Decoration',
+	'required_properties': 'yojoart:required_properties',
+	'angle': { '@id': 'yojoart:angle', '@type': 'xsd:double' },
+	'flipV': { '@id': 'yojoart:flipV', '@type': 'xsd:boolean' },
+	'flipH': { '@id': 'yojoart:flipH', '@type': 'xsd:boolean' },
+	'offsetX': { '@id': 'yojoart:offsetX', '@type': 'xsd:double' },
+	'offsetY': { '@id': 'yojoart:offsetY', '@type': 'xsd:double' },
+	'scale': { '@id': 'yojoart:scale', '@type': 'xsd:double' },
+	'opacity': { '@id': 'yojoart:opacity', '@type': 'xsd:double' },
 	// vcard
 	vcard: 'http://www.w3.org/2006/vcard/ns#',
 	// CherryPick
