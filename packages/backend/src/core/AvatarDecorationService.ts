@@ -4,6 +4,7 @@
  */
 
 import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
+import promiseLimit from 'promise-limit';
 import * as Redis from 'ioredis';
 import { DataSource, In, IsNull, Not } from 'typeorm';
 import type { AvatarDecorationsRepository, InstancesRepository, UsersRepository, MiAvatarDecoration, MiUser } from '@/models/_.js';
@@ -427,17 +428,33 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 		// 1st pass: 文字列URI項目をオブジェクトへ解決するだけ。DB書き込みは一切行わない
 		// (スキップになった回の他項目分の定義行が作られず、孤児行も発生しない)
 		// 装着数の上限はi/updateのアバターデコレーション上限(16)に合わせる
+		const rawItems = toArray(items ?? []).slice(0, 16);
+		// 重複URIを1回だけ解決し、小さな並行数で外部HTTPを待つ(直列だと最大16×5秒かかる)。
+		// Resolverは同一インスタンスで解決済みのURIを拒否するため、重複排除は失敗扱いを避けるためにも必要
+		const stringUris = [...new Set(rawItems.filter((x): x is string => typeof x === 'string'))];
+		const resolveLimit = promiseLimit<IObject | null>(2);
+		const resolvedByUri = new Map<string, IObject | null>();
+		await Promise.all(stringUris.map(uri => resolveLimit(async () => {
+			const resolved = await resolver.resolve(uri).catch(() => null);
+			resolvedByUri.set(uri, resolved);
+			return resolved;
+		})));
+
 		const resolvedItems: IObject[] = [];
+		const seenStringUris = new Set<string>();
 		let resolveFailures = 0;
-		for (const rawItem of toArray(items ?? []).slice(0, 16)) {
+		for (const rawItem of rawItems) {
 			if (typeof rawItem !== 'string') {
 				// inline項目の配列要素がnull等の不正値内容は解決失敗に数えない(恒久的な不正がスキップで更新を止め続けるのを防ぐ)
 				if (rawItem != null) resolvedItems.push(rawItem);
 				continue;
 			}
+			// 同一URIの重複項目は同じ装備を二重に追加しないよう1件目だけを使う
+			if (seenStringUris.has(rawItem)) continue;
+			seenStringUris.add(rawItem);
 			// resolveのreject(通信・一時的障害)も解決不能なnull返却もどちらも失敗として計上する。
 			// 送信件側の削除と一時的障害を区別できないため安全側で失敗扱いにする
-			const resolved = await resolver.resolve(rawItem).catch(() => null);
+			const resolved = resolvedByUri.get(rawItem) ?? null;
 			if (resolved == null) resolveFailures++;
 			else resolvedItems.push(resolved);
 		}
@@ -505,10 +522,15 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 				const changed =
 					decorationData.name !== decoration.name ||
 					decorationData.description !== decoration.description ||
-					decorationData.url !== decoration.url ||
-					decorationData.remoteId !== decoration.remoteId;
+					decorationData.url !== decoration.url;
 				if (changed) {
-					await this.update(decoration.id, decorationData);
+					// remoteIdはアイテム単位の値で共有行の属性ではない。上書きすると旧API方式が
+					// (host, remoteId)で共有行を引けなくなるため、name/description/urlだけを更新する
+					await this.update(decoration.id, {
+						name: decorationData.name,
+						description: decorationData.description,
+						url: decorationData.url,
+					});
 					this.cacheRemote.delete();
 				}
 			}
@@ -580,6 +602,7 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 	 * バッチ数分繰り返すことになり、ヘルパーテーブルで回避したはずのコストが戻るため、この競合は意図的に許容している。
 	 * ローカル行(hostがnull)は管理画面で管理者が運用する対象なので、ホストマークが付かないため対象外。
 	 * 保持期間内の未参照行が残ったホストは、次回以降のジョブで処理できるよう再マークする。
+	 * 処理途中で失敗した場合も、完全に処理できなかったホストはセットへ戻し、次回の実行で再試行する。
 	 * @returns 削除した行数
 	 */
 	@bindThis
@@ -594,6 +617,8 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 		// インライン副クエリだとユーザーテーブル全スキャンがクエリごとに再実行され大規模インスタンスで破綻する(定数コメントのベンチ参照)。
 		// 定期cleanジョブはキュー経由で同時実行されないため固定テーブル名で良いが、異常終了で残っても次の実行冒頭で作り直す
 		const runner = this.db.createQueryRunner();
+		// Redisからspopしたホストを覚えておき、途中で失敗したときはfinallyで未処理分をセットへ戻す
+		const requeueHosts: string[] = [];
 		try {
 			await runner.query(`DROP TABLE IF EXISTS "${CLEANUP_REFERENCED_IDS_TABLE}"`);
 			await runner.query(`CREATE UNLOGGED TABLE "${CLEANUP_REFERENCED_IDS_TABLE}" (id text PRIMARY KEY)`);
@@ -636,6 +661,7 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 				const batch = await this.redisClient.spop(CLEANUP_HOSTS_REDIS_KEY, CLEANUP_HOSTS_POP_SIZE);
 				if (batch.length === 0) break;
 				hosts.push(...batch);
+				requeueHosts.push(...batch);
 				popped += batch.length;
 			}
 
@@ -676,12 +702,20 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 					.limit(1)
 					.getRawMany<{ id: string }>();
 				if (pending.length > 0) pendingHosts.push(host);
+
+				// このホストは処理し終えたので、失敗時の再登録対象から外す
+				const requeueIndex = requeueHosts.indexOf(host);
+				if (requeueIndex !== -1) requeueHosts.splice(requeueIndex, 1);
 			}
 
 			if (pendingHosts.length > 0) await this.redisClient.sadd(CLEANUP_HOSTS_REDIS_KEY, ...pendingHosts);
 
 			return totalDeleted;
 		} finally {
+			// 途中で失敗した場合、spop済みで処理しきれなかったホストをセットへ戻す
+			if (requeueHosts.length > 0) {
+				await this.redisClient.sadd(CLEANUP_HOSTS_REDIS_KEY, ...requeueHosts).catch(() => {});
+			}
 			await runner.query(`DROP TABLE IF EXISTS "${CLEANUP_REFERENCED_IDS_TABLE}"`).catch(() => {});
 			await runner.release();
 		}

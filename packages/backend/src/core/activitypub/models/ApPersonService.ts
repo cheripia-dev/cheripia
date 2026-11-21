@@ -259,6 +259,24 @@ export class ApPersonService implements OnModuleInit {
 	}
 
 	/**
+	 * リモートアクターの信頼できないJSONから、保存可能なデコレーションコレクションURIのみを取り出す。
+	 * 512文字を超える値をvarchar(512)のdecorationsUriへ書き込むと、そのアクターの作成・更新が
+	 * DBエラーで恒久的に失敗するため、512文字以下の絶対http(s) URLのみを受け付ける。
+	 */
+	@bindThis
+	private getDecorationsUri(value: IActor['_yojoart_decorations']): string | undefined {
+		const uri = tryGetApId(value);
+		if (uri == null || uri.length > 512) return undefined;
+		try {
+			const url = new URL(uri);
+			if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined;
+		} catch {
+			return undefined;
+		}
+		return uri;
+	}
+
+	/**
 	 * uriからUser(Person)をフェッチします。
 	 *
 	 * Misskeyに対象のPersonが登録されていればそれを返し、登録がなければnullを返します。
@@ -477,7 +495,7 @@ export class ApPersonService implements OnModuleInit {
 					isSquareAvatars: person.isSquareAvatars,
 					canChat: (person as any)._misskey_canChat ?? true,
 					clipsUri: person._yojoart_clips ? getApId(person._yojoart_clips) : person.playlists ? getApId(person.playlists) : undefined,
-					decorationsUri: tryGetApId(person._yojoart_decorations) ?? undefined,
+					decorationsUri: this.getDecorationsUri(person._yojoart_decorations),
 				})) as MiRemoteUser;
 
 				let _description: string | null = null;
@@ -776,7 +794,7 @@ export class ApPersonService implements OnModuleInit {
 			clipsUri: person._yojoart_clips ?? person.playlists,
 			...(await this.resolveAvatarAndBanner(exist, person.icon, person.image, role_policy).catch(() => ({}))),
 			...(channelId ? { channelId } : {}),
-			decorationsUri: tryGetApId(person._yojoart_decorations) ?? undefined,
+			decorationsUri: this.getDecorationsUri(person._yojoart_decorations),
 		} as Partial<MiRemoteUser> & Pick<MiRemoteUser, 'isBot' | 'isCat' | 'isLocked' | 'movedToUri' | 'alsoKnownAs' | 'isExplorable'>;
 
 		const moving = ((): boolean => {

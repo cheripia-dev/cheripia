@@ -16,8 +16,8 @@ import { id } from './util/id.js';
 // hostがNULL(ローカル行)またはrawUrlがNULL(旧API方式(remoteUserUpdate)行)の行は、UNIQUEインデックスで
 // NULL同士が非一致になるため制約の対象外。
 // 式インデックスはエンティティメタデータで表現できないので、IDX_EMOJI_ROLE_IDSと同様にsynchronize: falseで宣言し
-// 作成はハンドメイドmigrationで行う(1795021088953-AvatarDecorationHostRawUrlIndex.jsで作成、
-// 1795147371786-AvatarDecorationHostRawUrlUniqueIndex.jsで既存重複行を整理してUNIQUE化)。
+// 作成はハンドメイドmigrationで行う(1795147371786-AvatarDecorationHostRawUrlUniqueIndex.jsで
+// 既存重複行を整理してUNIQUE化)。
 // 対応する検索はAvatarDecorationService.findRemoteDecorationByRawUrlでmd5()を適用して行っている
 @Index('IDX_avatar_decoration_host_raw_url_md5', { synchronize: false })
 export class MiAvatarDecoration {

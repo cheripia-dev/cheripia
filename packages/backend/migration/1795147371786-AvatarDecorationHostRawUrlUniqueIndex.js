@@ -24,7 +24,9 @@ export class AvatarDecorationHostRawUrlUniqueIndex1795147371786 {
         //
         // SET LOCAL statement_timeout = 0: 以降のuserテーブルスキャンは、大規模インスタンスでは
         // アプリケーションのDataSourceやdb.extraが設定するstatement_timeoutを超える可能性がある。
-        // マイグレーションはトランザクション内で走るため、SET LOCALはこのマイグレーションにだけ影響する
+        // migrationsTransactionModeが'all'(既定)の場合は1回の実行の全migrationが単一トランザクションを
+        // 共有するため、このSET LOCALは後続のmigrationにも波及する。'each'
+        // (MISSKEY_MIGRATION_CREATE_INDEX_CONCURRENTLY=1)の場合はこのmigrationにだけ影響する
         await queryRunner.query(`SET LOCAL statement_timeout = 0`);
 
         // 重複ペア(重複行id -> 保持行id)を一度だけ構築する
@@ -101,8 +103,8 @@ export class AvatarDecorationHostRawUrlUniqueIndex1795147371786 {
      */
     async down(queryRunner) {
         // 削除した重複行と書き換えたuser.avatarDecorationsは、各ユーザーがどの行を参照していたかを
-        // 特定できないため復元できない。巻き戻せるのはインデックスの制約だけで、非UNIQUEに戻す
+        // 特定できないため復元できない。巻き戻せるのはインデックスだけで、このブランチより前の
+        // スキーマにはインデックスが無かったため、down()は単に削除する
         await queryRunner.query(`DROP INDEX IF EXISTS "IDX_avatar_decoration_host_raw_url_md5"`);
-        await queryRunner.query(`CREATE INDEX "IDX_avatar_decoration_host_raw_url_md5" ON "avatar_decoration" ("host", md5("rawUrl"))`);
     }
 }

@@ -442,6 +442,65 @@ describe('AvatarDecorationService', () => {
 			const updated = await usersRepository.findOneByOrFail({ id: user.id });
 			expect(updated.avatarDecorations).toHaveLength(2);
 		});
+
+		test('orderedItemsに同一の文字列URIが重複しても1回だけ解決し、重複装備を作らない', async () => {
+			const host = uniqueHost();
+			const user = await createRemoteUser(host);
+			const decorationsUri = `${user.uri}/collections/decorations`;
+			const referencedUrl = `https://${host}/deco/duplicate`;
+			resolver.register(decorationsUri, {
+				id: decorationsUri,
+				type: 'OrderedCollection',
+				orderedItems: [
+					referencedUrl,
+					referencedUrl,
+				],
+			});
+			resolver.register(referencedUrl, decorationItem(host));
+
+			const result = await avatarDecorationService.remoteDecorationsFromAp({ ...user, decorationsUri }, resolver);
+			expect(result).toBe('ok');
+
+			// 同じURIを2回取得せず、装備も1件だけになる
+			expect(resolver.remoteGetTrials().filter(uri => uri === referencedUrl)).toHaveLength(1);
+			const updated = await usersRepository.findOneByOrFail({ id: user.id });
+			expect(updated.avatarDecorations).toHaveLength(1);
+		});
+
+		test('APインポートで既存の共有行を更新してもremoteIdは上書きされない', async () => {
+			const host = uniqueHost();
+			const imageUrl = `https://${host}/files/shared-legacy.png`;
+			const decoration = await avatarDecorationsRepository.insertOne({
+				id: genAidx(Date.now()),
+				url: imageUrl,
+				rawUrl: imageUrl,
+				name: 'legacy name',
+				description: 'legacy desc',
+				host,
+				remoteId: 'legacy-remote-id',
+			});
+			const user = await createRemoteUser(host);
+			const decorationsUri = `${user.uri}/collections/decorations`;
+			resolver.register(decorationsUri, {
+				id: decorationsUri,
+				type: 'OrderedCollection',
+				orderedItems: [
+					{
+						// 送信側の通常形(item.idなし)なのでAP経路のremoteIdはnullになる
+						type: 'Decoration',
+						required_properties: [],
+						image: { type: 'Image', url: imageUrl, name: 'ap name', summary: 'ap desc' },
+					},
+				],
+			});
+
+			const result = await avatarDecorationService.remoteDecorationsFromAp({ ...user, decorationsUri }, resolver);
+			expect(result).toBe('ok');
+
+			const after = await avatarDecorationsRepository.findOneByOrFail({ id: decoration.id });
+			expect(after.name).toBe('ap name');
+			expect(after.remoteId).toBe('legacy-remote-id');
+		});
 	});
 
 	describe('remoteDecorationsFromApの定義行重複排除', () => {
@@ -843,6 +902,27 @@ describe('AvatarDecorationService', () => {
 				expect(deletedCount).toBeGreaterThanOrEqual(1);
 			} finally {
 				avatarDecorationService.cleanupReferencedChunkUsers = originalChunkSize;
+			}
+		});
+
+		test('処理途中で失敗した場合も、spop済みで未処理のホストは次回実行のために再マークされる', async () => {
+			await redisClient.del(cleanupKey);
+			const host1 = uniqueHost();
+			const host2 = uniqueHost();
+			await insertDecorationRow({ createdAt: oldTs, host: host1 });
+			await insertDecorationRow({ createdAt: oldTs, host: host2 });
+			await redisClient.sadd(cleanupKey, host1, host2);
+
+			const deleteSpy = vi.spyOn(avatarDecorationsRepository, 'delete').mockRejectedValueOnce(new Error('db down'));
+			try {
+				await expect(avatarDecorationService.cleanUnusedRemoteDecorations()).rejects.toThrow('db down');
+
+				// 途中で失敗しても、取り出したホストは失われず次回の実行対象として残る
+				const members = await redisClient.smembers(cleanupKey);
+				expect(members).toEqual(expect.arrayContaining([host1, host2]));
+			} finally {
+				deleteSpy.mockRestore();
+				await redisClient.del(cleanupKey);
 			}
 		});
 	});

@@ -77,7 +77,7 @@ describe.runIf(process.env.DECORATION_BENCH === 'true')('AvatarDecorationBench: 
 			await runner.query('SET maintenance_work_mem = \'512MB\'');
 			await runner.query(`DELETE FROM avatar_decoration WHERE host LIKE '%${BENCH_HOST_SUFFIX}'`);
 			await runner.query(`DELETE FROM "user" WHERE host LIKE '%${BENCH_HOST_SUFFIX}'`);
-			// 本番マイグレーション 1795021088953 と同一の式インデックス
+			// 本番マイグレーション 1795147371786 と同一の式インデックス
 			await runner.query(`CREATE INDEX IF NOT EXISTS "IDX_avatar_decoration_host_raw_url_md5" ON "avatar_decoration" ("host", md5("rawUrl"))`);
 			await runner.query(`
 				CREATE OR REPLACE FUNCTION bench_b36n(n bigint) RETURNS text AS $$

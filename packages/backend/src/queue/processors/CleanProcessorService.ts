@@ -71,9 +71,13 @@ export class CleanProcessorService {
 
 		// リモートActor由来のアバターデコレーション定義行のうち、どのユーザーからも参照されなくなった孤児行を削除する
 		// (リモート配信側のコレクション変更・URL差し替えによる残骸の回収。行の増加自体はリモート由来の添付等と同様で仕様互換)
-		const cleanedRemoteDecorations = await this.avatarDecorationService.cleanUnusedRemoteDecorations();
-		if (cleanedRemoteDecorations > 0) {
-			this.logger.info(`Cleaned ${cleanedRemoteDecorations} unused remote avatar decorations`);
+		try {
+			const cleanedRemoteDecorations = await this.avatarDecorationService.cleanUnusedRemoteDecorations();
+			if (cleanedRemoteDecorations > 0) {
+				this.logger.info(`Cleaned ${cleanedRemoteDecorations} unused remote avatar decorations`);
+			}
+		} catch (err) {
+			this.logger.error('Failed to clean unused remote avatar decorations', err as Error);
 		}
 
 		this.reversiService.cleanOutdatedGames();
