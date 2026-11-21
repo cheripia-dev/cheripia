@@ -20,6 +20,7 @@ import { isDecoration, tryGetApId } from '@/core/activitypub/type.js';
 import type { IObject } from '@/core/activitypub/type.js';
 import { toArray } from '@/misc/prelude/array.js';
 import { truncate } from '@/misc/truncate.js';
+import { isDuplicateKeyValueError } from '@/misc/is-duplicate-key-value-error.js';
 import type { Resolver } from '@/core/activitypub/ApResolverService.js';
 import type { Config } from '@/config.js';
 
@@ -280,8 +281,26 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 				definition = (await this.createRemoteDecorationIfAbsent(decorationData)).decoration;
 				if (definition == null) continue;
 			} else {
-				await this.update(definition.id, decorationData);
-				this.cacheRemote.delete();
+				// フィールドが実際に変更された場合にのみ定義行を書き換える(無意味なupdatedAt更新とキャッシュ破棄を省く)。
+				// 旧API方式のname/descriptionは未取得(undefined)のときUPDATEでも書き換えられないため、現在の値と同じとみなして比較する
+				const changed =
+					(decorationData.name ?? definition.name) !== definition.name ||
+					(decorationData.description ?? definition.description) !== definition.description ||
+					decorationData.url !== definition.url ||
+					decorationData.rawUrl !== definition.rawUrl ||
+					decorationData.remoteId !== definition.remoteId;
+				if (changed) {
+					try {
+						await this.update(definition.id, decorationData);
+						this.cacheRemote.delete();
+					} catch (err) {
+						// (host, rawUrl)のUNIQUE制約に違反: 同じ画像URLの行が既に存在する。
+						// 失敗せずにその既存行へ集約し、既に存在していた行のremoteIdは上書きしない
+						if (!isDuplicateKeyValueError(err)) throw err;
+						definition = (await this.createRemoteDecorationIfAbsent(decorationData)).decoration;
+						if (definition == null) continue;
+					}
+				}
 			}
 
 			updates.avatarDecorations.push({
@@ -551,6 +570,7 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 	 * 行が増えること自体はリモート由来の添付や投稿と同様に仕様互換なので上限は設けず、
 	 * 参照が切れた孤児行のみを保持期間(7日)経過後に削除する。
 	 * 変更の無い(マークのない)ホストはジョブから外れる。マークはリモートユーザーの取り込み成功時のみ付与される。
+	 * マーク済みホストが0件の実行では、参照id集合のmaterialize(ユーザーテーブルの全件スキャン)を行わずに終了する。
 	 * 参照判定は、実行開始時に1回だけ展開する参照id集合のヘルパーテーブル(UNLOGGED)に対する反対結合で行い、
 	 * (host, rawUrl)キーで同一hostの複数ユーザーに共有された定義行は、参照しているユーザーが1人でもいれば削除されない。
 	 * 参照id集合は実行開始時点のスナップショットなので、実行中に保持期間超の行が改めて参照された場合、参照された直後に
@@ -566,6 +586,10 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 	public async cleanUnusedRemoteDecorations(): Promise<number> {
 		const cutoff = this.idService.gen(Date.now() - REMOTE_DECORATION_CLEANUP_RETENTION_MS);
 
+		// 処理対象のマーク済みホストがいない場合、参照id集合のmaterialize(ユーザーテーブルの全件スキャン)をスキップする。
+		// ホストのspopはこのチェックより後に走るので、ジョブが異常終了してもマーク済みホストは失われない
+		if ((await this.redisClient.scard(CLEANUP_HOSTS_REDIS_KEY)) === 0) return 0;
+
 		// 実行中に1回だけ参照id集合をmaterializeする。
 		// インライン副クエリだとユーザーテーブル全スキャンがクエリごとに再実行され大規模インスタンスで破綻する(定数コメントのベンチ参照)。
 		// 定期cleanジョブはキュー経由で同時実行されないため固定テーブル名で良いが、異常終了で残っても次の実行冒頭で作り直す
@@ -579,22 +603,29 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 			// ループ中に追加されたユーザー(idは生成時刻順で末尾に積まれる)は後続チャンクで拾われる。
 			let lastUserId = '';
 			for (;;) {
-				await runner.query(`
-					INSERT INTO "${CLEANUP_REFERENCED_IDS_TABLE}" (id)
-					SELECT DISTINCT elem ->> 'id' FROM (
-						SELECT "u"."avatarDecorations" FROM "user" "u"
-						WHERE "u"."id" > $1 ORDER BY "u"."id" ASC LIMIT $2
-					) chunk, jsonb_array_elements(chunk."avatarDecorations") AS elem
-					WHERE (elem ->> 'id') IS NOT NULL
-					ON CONFLICT DO NOTHING`, [lastUserId, this.cleanupReferencedChunkUsers]);
-
+				// チャンク境界をINSERTの前に一度だけ確定し、INSERTには同じ範囲条件(id > lastUserId AND id <= boundary)を付ける。
+				// 2文がREAD COMMITTEDの別スナップショットで走るため、境界をINSERT後に求めてしまうと、
+				// その間にチャンク内のユーザーが削除されたとき次の境界が未スキャンのユーザーを越えて後ろへずれ、
+				// そのユーザーの参照idが集合に載らずに孤児判定で削除され得る。
+				// 削除されたユーザー自身は参照を持たないので、その範囲から消えても影響しない
 				const next = (await runner.query(`
 					SELECT max("chunk"."id") AS "id" FROM (
 						SELECT "u"."id" FROM "user" "u"
 						WHERE "u"."id" > $1 ORDER BY "u"."id" ASC LIMIT $2
 					) chunk`, [lastUserId, this.cleanupReferencedChunkUsers])) as { id: string | null }[];
 				if (next[0] == null || next[0].id == null) break;
-				lastUserId = next[0].id;
+				const boundary = next[0].id;
+
+				await runner.query(`
+					INSERT INTO "${CLEANUP_REFERENCED_IDS_TABLE}" (id)
+					SELECT DISTINCT elem ->> 'id' FROM (
+						SELECT "u"."avatarDecorations" FROM "user" "u"
+						WHERE "u"."id" > $1 AND "u"."id" <= $2
+					) chunk, jsonb_array_elements(chunk."avatarDecorations") AS elem
+					WHERE (elem ->> 'id') IS NOT NULL
+					ON CONFLICT DO NOTHING`, [lastUserId, boundary]);
+
+				lastUserId = boundary;
 			}
 
 			// 処理対象ホストを先にすべて取り出してから処理する。

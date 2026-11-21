@@ -5,7 +5,7 @@
 
 process.env.NODE_ENV = 'test';
 
-import { describe, beforeAll, beforeEach, test, expect } from 'vitest';
+import { describe, beforeAll, beforeEach, test, expect, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
 import * as Redis from 'ioredis';
 import type { DataSource } from 'typeorm';
@@ -16,8 +16,9 @@ import { CoreModule } from '@/core/CoreModule.js';
 import { DI } from '@/di-symbols.js';
 import { LoggerService } from '@/core/LoggerService.js';
 import { AvatarDecorationService } from '@/core/AvatarDecorationService.js';
+import { HttpRequestService } from '@/core/HttpRequestService.js';
 import { ApRendererService } from '@/core/activitypub/ApRendererService.js';
-import type { AvatarDecorationsRepository, UsersRepository } from '@/models/_.js';
+import type { AvatarDecorationsRepository, InstancesRepository, UsersRepository } from '@/models/_.js';
 import type { MiUser } from '@/models/User.js';
 import { genAidx } from '@/misc/id/aidx.js';
 import { secureRndstr } from '@/misc/secure-rndstr.js';
@@ -29,8 +30,10 @@ function uniqueHost(): string {
 describe('AvatarDecorationService', () => {
 	let usersRepository: UsersRepository;
 	let avatarDecorationsRepository: AvatarDecorationsRepository;
+	let instancesRepository: InstancesRepository;
 	let avatarDecorationService: AvatarDecorationService;
 	let apRendererService: ApRendererService;
+	let httpRequestService: HttpRequestService;
 	let redisClient: Redis.Redis;
 	let resolver: MockResolver;
 	let db: DataSource;
@@ -45,8 +48,10 @@ describe('AvatarDecorationService', () => {
 
 		usersRepository = app.get<UsersRepository>(DI.usersRepository);
 		avatarDecorationsRepository = app.get<AvatarDecorationsRepository>(DI.avatarDecorationsRepository);
+		instancesRepository = app.get<InstancesRepository>(DI.instancesRepository);
 		avatarDecorationService = app.get<AvatarDecorationService>(AvatarDecorationService);
 		apRendererService = app.get<ApRendererService>(ApRendererService);
+		httpRequestService = app.get<HttpRequestService>(HttpRequestService);
 		redisClient = app.get<Redis.Redis>(DI.redis);
 		resolver = new MockResolver(await app.resolve<LoggerService>(LoggerService));
 		db = app.get<DataSource>(DI.db);
@@ -550,6 +555,73 @@ describe('AvatarDecorationService', () => {
 		});
 	});
 
+	describe('remoteUserUpdate(旧API方式)の定義行更新', () => {
+		// テストDBのスキーマはsynchronizeで構築されるため(host, md5(rawUrl))のUNIQUE式インデックスが無く、
+		// 既存行のrawUrl更新がunique_violationになる窓を再現できない。上の重複排除テストと同じく
+		// テスト用hostに限定したUNIQUE式インデックスを一時的に作って本番の制約を再現し、後片付けで削除する
+		test('remoteId違いで同じ画像URLの行が既に存在する定義更新は、unique_violationで同期を止めず既存行へ集約される', async () => {
+			const host = uniqueHost();
+			const indexName = `test_uq_ad_host_raw_md5_${secureRndstr(6).toLowerCase()}`;
+			await avatarDecorationsRepository.query(`CREATE UNIQUE INDEX "${indexName}" ON "avatar_decoration" ("host", md5("rawUrl")) WHERE "host" = '${host}'`);
+
+			try {
+				// 旧API方式が走る条件: インスタンスが対応ソフトとして登録済みで、ユーザーのdecorationsUriが無い
+				await instancesRepository.insertOne({
+					id: genAidx(Date.now()),
+					firstRetrievedAt: new Date(),
+					host,
+					softwareName: 'misskey',
+				});
+				const user = await createRemoteUser(host);
+
+				const url1 = `https://${host}/files/u1.png`;
+				const url2 = `https://${host}/files/u2.png`;
+				const insertRow = async (remoteId: string, rawUrl: string): Promise<{ id: string }> =>
+					avatarDecorationsRepository.insertOne({
+						id: genAidx(Date.now()),
+						url: rawUrl,
+						rawUrl,
+						name: `deco ${remoteId}`,
+						description: '',
+						host,
+						remoteId,
+					});
+				// 同一hostの既存行B(remoteId=b, rawUrl=url2)と同じURLで、行A(remoteId=a, rawUrl=url1)を上書きする場面を再現する
+				const rowA = await insertRow('a', url1);
+				const rowB = await insertRow('b', url2);
+
+				// /api/users/show は「AのURLがu2へ変更された」応答、/api/get-avatar-decorations は定義一覧を返す
+				const sendSpy = vi.spyOn(httpRequestService, 'send').mockImplementation(async (url: string) => {
+					const body = url.includes('/api/users/show')
+						? { avatarDecorations: [{ id: 'a', url: url2, angle: 0, flipH: false, offsetX: 0, offsetY: 0, scale: 1, opacity: 1 }] }
+						: [{ id: 'a', name: 'deco a', description: 'desc a' }];
+					return { json: async () => body } as never;
+				});
+
+				try {
+					const result = await avatarDecorationService.remoteUserUpdate(user);
+					expect(result).toBe('ok');
+
+					// ユーザーは衝突相手の既存行Bを参照し、行BのremoteIdは上書きされない
+					const updatedUser = await usersRepository.findOneByOrFail({ id: user.id });
+					expect(updatedUser.avatarDecorations.map(x => x.id)).toEqual([rowB.id]);
+
+					// 行Aは元のrawUrlのまま残る(UNIQUE違反でUPDATEが中断され、既存行Bへ集約された結果)
+					const afterA = await avatarDecorationsRepository.findOneByOrFail({ id: rowA.id });
+					expect(afterA.rawUrl).toBe(url1);
+					const afterB = await avatarDecorationsRepository.findOneByOrFail({ id: rowB.id });
+					expect(afterB.remoteId).toBe('b');
+				} finally {
+					sendSpy.mockRestore();
+				}
+			} finally {
+				await avatarDecorationsRepository.query(`DROP INDEX IF EXISTS "${indexName}"`);
+				await avatarDecorationsRepository.delete({ host });
+				await instancesRepository.delete({ host });
+			}
+		});
+	});
+
 	describe('renderDecorations', () => {
 		test('保存単位系をAP配信単位系(radian・アイコン基準)へ変換し、受信側で逆変換すると往復一致する', async () => {
 			const decoration = await avatarDecorationsRepository.insertOne({
@@ -688,6 +760,24 @@ describe('AvatarDecorationService', () => {
 			const deletedCount = await avatarDecorationService.cleanUnusedRemoteDecorations();
 			expect(deletedCount).toBe(0);
 			expect(await avatarDecorationsRepository.exists({ where: { id: orphanRow.id } })).toBe(true);
+		});
+
+		test('マーク済みホストが0件の実行は、参照id集合のmaterialize(ユーザーテーブル全走査)を行わずに0を返す', async () => {
+			await redisClient.del(cleanupKey);
+			// 削除対象になりそうな7日超の孤児行を作っても、ホストにマークが無ければmaterialize自体が走らない
+			const host = uniqueHost();
+			await insertDecorationRow({ createdAt: oldTs, host });
+
+			// 正常終了する実行は後片付けでヘルパーテーブルをDROPするため、materializeの有無は
+			// createQueryRunnerが呼ばれるかどうかで確認する(early returnではrunnerを作らない)
+			const runnerSpy = vi.spyOn(db, 'createQueryRunner');
+			try {
+				const deletedCount = await avatarDecorationService.cleanUnusedRemoteDecorations();
+				expect(deletedCount).toBe(0);
+				expect(runnerSpy).not.toHaveBeenCalled();
+			} finally {
+				runnerSpy.mockRestore();
+			}
 		});
 
 		test('保持期間内の未参照行が残るホストは次回以降のために再マークされる', async () => {
