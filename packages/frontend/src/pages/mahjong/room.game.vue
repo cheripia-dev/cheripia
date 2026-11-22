@@ -1810,6 +1810,8 @@ onUnmounted(() => {
 	justify-content: flex-end;
 	align-items: flex-end;
 	gap: 4px;
+	// この帯は手牌と重なり、その上に位置しているため、ポインタイベントは手牌に伝わるようにする。
+	pointer-events: none;
 }
 
 .myHuroItem {
