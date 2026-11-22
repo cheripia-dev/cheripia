@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import ms from 'ms';
 import { Injectable } from '@nestjs/common';
 import { Endpoint } from '@/server/api/endpoint-base.js';
 import { MahjongService } from '@/core/MahjongService.js';
@@ -11,6 +12,12 @@ export const meta = {
 	requireCredential: false,
 
 	kind: 'read:account',
+
+	// ロビーは 5 秒ごとにポーリングするため、1 タブあたり 1 分間に 12 回。複数のタブや再読み込みに備えて余裕を持たせる
+	limit: {
+		duration: ms('1minute'),
+		max: 120,
+	},
 
 	res: {
 		type: 'array',

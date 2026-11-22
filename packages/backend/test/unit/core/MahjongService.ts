@@ -93,6 +93,66 @@ function createCallingRoom(options: { riichi?: boolean } = {}): MahjongRoom {
 	return room;
 }
 
+function createRedisMock(store = new Map<string, string>()) {
+	const zsets = new Map<string, Map<string, number>>();
+	const commands = {
+		del: vi.fn((key: string) => {
+			const deleted = store.delete(key) || zsets.delete(key);
+			return Promise.resolve(deleted ? 1 : 0);
+		}),
+		get: vi.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
+		set: vi.fn((key: string, value: string) => {
+			store.set(key, value);
+			return Promise.resolve('OK');
+		}),
+		mget: vi.fn((keys: string[]) => Promise.resolve(keys.map(key => store.get(key) ?? null))),
+		zadd: vi.fn((key: string, score: number, member: string) => {
+			let zset = zsets.get(key);
+			if (zset == null) {
+				zset = new Map();
+				zsets.set(key, zset);
+			}
+			const added = !zset.has(member);
+			zset.set(member, score);
+			return Promise.resolve(added ? 1 : 0);
+		}),
+		zrem: vi.fn((key: string, ...members: string[]) => {
+			const zset = zsets.get(key);
+			let removed = 0;
+			for (const member of members) {
+				if (zset?.delete(member)) removed++;
+			}
+			return Promise.resolve(removed);
+		}),
+		zrevrange: vi.fn((key: string, start: number, stop: number) => {
+			const members = [...(zsets.get(key) ?? new Map<string, number>()).entries()]
+				.sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))
+				.map(([member]) => member);
+			return Promise.resolve(members.slice(start, stop + 1));
+		}),
+		expire: vi.fn(() => Promise.resolve(1)),
+		keys: vi.fn(() => Promise.reject(new Error('KEYS must not be used'))),
+	};
+	type CommandName = 'del' | 'set' | 'zadd' | 'zrem' | 'expire';
+	const multi = vi.fn(() => {
+		const queue: Array<() => Promise<unknown>> = [];
+		const chain = {} as Record<CommandName, (...args: unknown[]) => typeof chain> & { exec: () => Promise<Array<[Error | null, unknown]>> };
+		for (const name of ['del', 'set', 'zadd', 'zrem', 'expire'] as const) {
+			chain[name] = (...args: unknown[]) => {
+				queue.push(() => (commands[name] as (...a: unknown[]) => Promise<unknown>)(...args));
+				return chain;
+			};
+		}
+		chain.exec = async () => {
+			const results: Array<[Error | null, unknown]> = [];
+			for (const run of queue) results.push([null, await run()]);
+			return results;
+		};
+		return chain;
+	});
+	return { redisClient: { ...commands, multi }, store, zsets };
+}
+
 function createCallingService(room: MahjongRoom) {
 	const store = new Map<string, string>();
 	store.set(`mahjong:room:${room.id}`, JSON.stringify(room));
@@ -103,17 +163,7 @@ function createCallingService(room: MahjongRoom) {
 		ron: { e: null, s: null, w: null, n: null },
 	} satisfies CallingAnswersForTest));
 
-	const redisClient = {
-		del: vi.fn((key: string) => {
-			store.delete(key);
-			return Promise.resolve(1);
-		}),
-		get: vi.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
-		set: vi.fn((key: string, value: string) => {
-			store.set(key, value);
-			return Promise.resolve('OK');
-		}),
-	};
+	const { redisClient } = createRedisMock(store);
 
 	const service = new MahjongService(
 		redisClient as unknown as ConstructorParameters<typeof MahjongService>[0],
@@ -144,11 +194,7 @@ describe('MahjongService', () => {
 				published.push({ type, payload });
 			},
 		};
-		const redisClient = {
-			del: vi.fn().mockResolvedValue(1),
-			get: vi.fn().mockResolvedValue(null),
-			set: vi.fn().mockResolvedValue('OK'),
-		};
+		const { redisClient } = createRedisMock();
 
 		const service = new MahjongService(
 			redisClient as unknown as ConstructorParameters<typeof MahjongService>[0],
@@ -210,11 +256,7 @@ describe('MahjongService', () => {
 				published.push({ type, payload });
 			},
 		};
-		const redisClient = {
-			del: vi.fn().mockResolvedValue(1),
-			get: vi.fn().mockResolvedValue(null),
-			set: vi.fn().mockResolvedValue('OK'),
-		};
+		const { redisClient } = createRedisMock();
 
 		const service = new MahjongService(
 			redisClient as unknown as ConstructorParameters<typeof MahjongService>[0],
@@ -366,18 +408,7 @@ describe('MahjongService nextKyokuLocked abortive draw', () => {
 				published.push({ type, payload });
 			},
 		};
-		const store = new Map<string, string>();
-		const redisClient = {
-			del: vi.fn((key: string) => {
-				store.delete(key);
-				return Promise.resolve(1);
-			}),
-			get: vi.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
-			set: vi.fn((key: string, value: string) => {
-				store.set(key, value);
-				return Promise.resolve('OK');
-			}),
-		};
+		const { redisClient, store } = createRedisMock();
 
 		const service = new MahjongService(
 			redisClient as unknown as ConstructorParameters<typeof MahjongService>[0],
@@ -402,6 +433,142 @@ describe('MahjongService nextKyokuLocked abortive draw', () => {
 			expect(store.has('mahjong:gameNextKyokuConfirmation:test-room')).toBe(true);
 		} finally {
 			createInitialState.mockRestore();
+			service.dispose();
+		}
+	});
+});
+
+describe('MahjongService getActiveRooms', () => {
+	function createService() {
+		const redis = createRedisMock();
+		const service = new MahjongService(
+			redis.redisClient as unknown as ConstructorParameters<typeof MahjongService>[0],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[1],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[2],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
+		);
+		const saveRoom = (room: MahjongRoom) => (service as unknown as { saveRoom: (room: MahjongRoom) => Promise<void> }).saveRoom(room);
+		const deleteRoom = (roomId: string) => (service as unknown as { deleteRoom: (roomId: string) => Promise<void> }).deleteRoom(roomId);
+		return { ...redis, service, saveRoom, deleteRoom };
+	}
+
+	function createRoomAt(id: string, createdAt: number, state: { isStarted: boolean; isEnded: boolean }): MahjongRoom {
+		return {
+			...createRoom(),
+			id,
+			createdAt: new Date(createdAt).toISOString(),
+			...state,
+		};
+	}
+
+	const active = { isStarted: true, isEnded: false };
+
+	test('returns only started and not ended rooms, newest first, without KEYS', async () => {
+		const { service, saveRoom, redisClient } = createService();
+		try {
+			await saveRoom(createRoomAt('waiting', 4000, { isStarted: false, isEnded: false }));
+			await saveRoom(createRoomAt('old', 1000, active));
+			await saveRoom(createRoomAt('new', 3000, active));
+			await saveRoom(createRoomAt('ended', 2000, { isStarted: true, isEnded: true }));
+
+			const rooms = await service.getActiveRooms();
+
+			expect(rooms.map(room => room.id)).toEqual(['new', 'old']);
+			expect(redisClient.keys).not.toHaveBeenCalled();
+			expect(redisClient.get).not.toHaveBeenCalled();
+			expect(redisClient.mget).toHaveBeenCalledTimes(1);
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('removes a room from the index when it ends or is deleted', async () => {
+		const { service, saveRoom, deleteRoom, zsets } = createService();
+		try {
+			const room = createRoomAt('room', 1000, active);
+			await saveRoom(room);
+			await saveRoom(createRoomAt('other', 2000, active));
+			expect([...zsets.get('mahjong:activeRooms')!.keys()].sort()).toEqual(['other', 'room']);
+
+			room.isEnded = true;
+			await saveRoom(room);
+			await deleteRoom('other');
+
+			expect(zsets.get('mahjong:activeRooms')!.size).toBe(0);
+			expect(await service.getActiveRooms()).toEqual([]);
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('registers a room that was already in progress when it is saved next time', async () => {
+		const { service, saveRoom, store } = createService();
+		try {
+			// インデックスの導入前から続いている対局 (本体のみ存在する)
+			const room = createRoomAt('legacy', 1000, active);
+			store.set('mahjong:room:legacy', JSON.stringify(room));
+			expect(await service.getActiveRooms()).toEqual([]);
+
+			await saveRoom(room);
+
+			expect((await service.getActiveRooms()).map(room => room.id)).toEqual(['legacy']);
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('cleans up stale ids whose room key has expired or is broken', async () => {
+		const { service, saveRoom, store, zsets, redisClient } = createService();
+		try {
+			await saveRoom(createRoomAt('alive', 1000, active));
+			await saveRoom(createRoomAt('expired', 2000, active));
+			await saveRoom(createRoomAt('broken', 3000, active));
+			store.delete('mahjong:room:expired');
+			store.set('mahjong:room:broken', '{');
+
+			const rooms = await service.getActiveRooms();
+
+			expect(rooms.map(room => room.id)).toEqual(['alive']);
+			expect(redisClient.zrem).toHaveBeenCalledWith('mahjong:activeRooms', 'broken', 'expired');
+			expect([...zsets.get('mahjong:activeRooms')!.keys()]).toEqual(['alive']);
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('returns at most 30 rooms by default', async () => {
+		const { service, saveRoom, redisClient } = createService();
+		try {
+			for (let i = 0; i < 35; i++) {
+				await saveRoom(createRoomAt(`room${String(i).padStart(2, '0')}`, i * 1000, active));
+			}
+
+			const rooms = await service.getActiveRooms();
+
+			expect(rooms).toHaveLength(30);
+			expect(rooms[0]!.id).toBe('room34');
+			expect(rooms.at(-1)!.id).toBe('room05');
+			expect(redisClient.mget).toHaveBeenCalledTimes(1);
+			expect(redisClient.mget.mock.calls[0]![0]).toHaveLength(30);
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('reads further entries when stale ids fill the first batch', async () => {
+		const { service, saveRoom, store } = createService();
+		try {
+			await saveRoom(createRoomAt('a', 1000, active));
+			await saveRoom(createRoomAt('b', 2000, active));
+			await saveRoom(createRoomAt('stale1', 3000, active));
+			await saveRoom(createRoomAt('stale2', 4000, active));
+			store.delete('mahjong:room:stale1');
+			store.delete('mahjong:room:stale2');
+
+			const rooms = await service.getActiveRooms(2);
+
+			expect(rooms.map(room => room.id)).toEqual(['b', 'a']);
+		} finally {
 			service.dispose();
 		}
 	});

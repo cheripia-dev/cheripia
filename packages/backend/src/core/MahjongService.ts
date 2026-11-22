@@ -103,6 +103,35 @@ function isMahjongRound(value: unknown): value is Mmj.MasterState['round'] {
  */
 const AUX_KEY_TTL_SECONDS = 60 * 60;
 
+const ROOM_TTL_SECONDS = 60 * 30;
+
+/**
+ * 対局中のルームの ID を createdAt (ミリ秒) をスコアとして保持する Sorted Set。
+ * saveRoom は対局中のルームを保存するたびに ZADD を実行するため、このインデックスの導入前から続いている対局も次回の保存時に登録される。
+ * ルーム本体は TTL で消えるため、本体が消えた ID は getActiveRooms で削除する。
+ */
+const ACTIVE_ROOMS_KEY = 'mahjong:activeRooms';
+
+const ACTIVE_ROOMS_LIMIT = 30;
+
+function parseRoom(raw: string): MahjongRoom {
+	const parsed = JSON.parse(raw) as MahjongRoom;
+	// matchLength 導入前の既存ルームは東南戦 ('south') 扱いとする。
+	if (parsed.matchLength !== 'east' && parsed.matchLength !== 'south') {
+		parsed.matchLength = 'south';
+	}
+	return parsed;
+}
+
+/**
+ * MULTI を実行し、その中のいずれかのコマンドが失敗した場合は、単一のコマンドと同様に例外を投げる。
+ */
+async function execMulti(multi: Redis.ChainableCommander): Promise<void> {
+	const results = await multi.exec();
+	const failed = results?.find(([err]) => err != null);
+	if (failed) throw failed[0];
+}
+
 /**
  * 次局待機キー（`mahjong:gameNextKyokuConfirmation`）から確認フラグを読む。
  * 新形式（待機レコード）・旧形式（確認フラグのみ）の双方を受け付ける。
@@ -321,13 +350,24 @@ export class MahjongService implements OnApplicationShutdown {
 
 	@bindThis
 	private async saveRoom(room: MahjongRoom) {
-		await this.redisClient.set(`mahjong:room:${room.id}`, JSON.stringify(room), 'EX', 60 * 30);
+		const multi = this.redisClient.multi()
+			.set(`mahjong:room:${room.id}`, JSON.stringify(room), 'EX', ROOM_TTL_SECONDS);
+		if (room.isStarted && !room.isEnded) {
+			multi
+				.zadd(ACTIVE_ROOMS_KEY, new Date(room.createdAt).getTime(), room.id)
+				.expire(ACTIVE_ROOMS_KEY, ROOM_TTL_SECONDS);
+		} else if (room.isEnded) {
+			multi.zrem(ACTIVE_ROOMS_KEY, room.id);
+		}
+		await execMulti(multi);
 	}
 
 	@bindThis
 	private async deleteRoom(roomId: string) {
 		this.clearAllTimers(roomId);
-		await this.redisClient.del(`mahjong:room:${roomId}`);
+		await execMulti(this.redisClient.multi()
+			.del(`mahjong:room:${roomId}`)
+			.zrem(ACTIVE_ROOMS_KEY, roomId));
 	}
 
 	@bindThis
@@ -366,27 +406,43 @@ export class MahjongService implements OnApplicationShutdown {
 	public async getRoom(id: MahjongRoom['id']): Promise<MahjongRoom | null> {
 		const room = await this.redisClient.get(`mahjong:room:${id}`);
 		if (room == null) return null;
-		const parsed = JSON.parse(room) as MahjongRoom;
-		// matchLength 導入前の既存ルームは東南戦 ('south') 扱いとする。
-		if (parsed.matchLength !== 'east' && parsed.matchLength !== 'south') {
-			parsed.matchLength = 'south';
-		}
-		return parsed;
+		return parseRoom(room);
 	}
 
+	/**
+	 * 対局中のルームを createdAt の新しい順に最大 limit 件返す。
+	 * インデックスに残っているが、本体が消えた ID やルームが終了した ID は、この時点で削除する。
+	 */
 	@bindThis
-	public async getActiveRooms(): Promise<MahjongRoom[]> {
-		const keys = await this.redisClient.keys('*mahjong:room:*');
+	public async getActiveRooms(limit = ACTIVE_ROOMS_LIMIT): Promise<MahjongRoom[]> {
 		const rooms: MahjongRoom[] = [];
-		for (const key of keys) {
-			// ioredis の keyPrefix が付与されているため、mahjong:room: 以降を roomId として扱う
-			const index = key.indexOf('mahjong:room:');
-			if (index === -1) continue;
-			const room = await this.getRoom(key.slice(index + 'mahjong:room:'.length));
-			if (room == null) continue;
-			if (room.isStarted && !room.isEnded) rooms.push(room);
+		const staleIds: string[] = [];
+		// 削除対象のエントリが多い場合でも読み取り量が際限なく増えないよう、走査するバッチ数を制限する
+		for (let batch = 0; batch < 3 && rooms.length < limit; batch++) {
+			const start = batch * limit;
+			const ids = await this.redisClient.zrevrange(ACTIVE_ROOMS_KEY, start, start + limit - 1);
+			if (ids.length === 0) break;
+			const raws = await this.redisClient.mget(ids.map(id => `mahjong:room:${id}`));
+			for (const [i, id] of ids.entries()) {
+				const raw = raws[i];
+				let room: MahjongRoom | null = null;
+				try {
+					room = raw == null ? null : parseRoom(raw);
+				} catch {
+					// 壊れた値は一覧に出さない (本体キーは TTL で消える)
+				}
+				if (room == null || !room.isStarted || room.isEnded) {
+					staleIds.push(id);
+					continue;
+				}
+				if (rooms.length < limit) rooms.push(room);
+			}
+			if (ids.length < limit) break;
 		}
-		return rooms.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+		if (staleIds.length > 0) {
+			await this.redisClient.zrem(ACTIVE_ROOMS_KEY, ...staleIds);
+		}
+		return rooms;
 	}
 
 	@bindThis
