@@ -76,10 +76,8 @@ import { useStream } from '@/stream.js';
 import { useRouter } from '@/router.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { i18n } from '@/i18n.js';
-import { ensureSignin } from '@/i.js';
+import { $i } from '@/i.js';
 import * as os from '@/os.js';
-
-const $i = ensureSignin();
 
 const props = defineProps<{
 	roomId: string;
@@ -210,7 +208,7 @@ async function fetchRoom() {
 			await backToLobbyWithAlert('観戦できる対局がありません。');
 			return;
 		}
-		if ([_room.user1Id, _room.user2Id, _room.user3Id, _room.user4Id].includes($i.id)) {
+		if ($i != null && [_room.user1Id, _room.user2Id, _room.user3Id, _room.user4Id].includes($i.id)) {
 			// 対局者本人は通常の対局画面へ
 			router.pushByPath(`/mahjong/g/${_room.id}`);
 			return;

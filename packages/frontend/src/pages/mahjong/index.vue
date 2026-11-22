@@ -58,6 +58,7 @@ import MkButton from '@/components/MkButton.vue';
 import { i18n } from '@/i18n.js';
 import { useRouter } from '@/router.js';
 import * as os from '@/os.js';
+import { pleaseLogin } from '@/utility/please-login.js';
 
 const router = useRouter();
 
@@ -97,6 +98,9 @@ useInterval(fetchActiveRooms, 1000 * 5, {
 });
 
 async function joinRoom() {
+	const isLoggedIn = await pleaseLogin();
+	if (!isLoggedIn) return;
+
 	const { canceled, result } = await os.inputText({
 		title: 'ルームID / URL',
 	});
@@ -117,6 +121,9 @@ async function joinRoom() {
 }
 
 async function createRoom() {
+	const isLoggedIn = await pleaseLogin();
+	if (!isLoggedIn) return;
+
 	try {
 		const room = await misskeyApi('mahjong/create-room', {
 		});

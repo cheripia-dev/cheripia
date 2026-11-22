@@ -8,7 +8,7 @@ import { Endpoint } from '@/server/api/endpoint-base.js';
 import { MahjongService } from '@/core/MahjongService.js';
 
 export const meta = {
-	requireCredential: true,
+	requireCredential: false,
 
 	kind: 'read:account',
 

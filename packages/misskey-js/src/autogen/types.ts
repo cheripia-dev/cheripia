@@ -3204,7 +3204,7 @@ export type paths = {
          * mahjong/rooms
          * @description No description provided.
          *
-         *     **Credential required**: *Yes* / **Permission**: *read:account*
+         *     **Credential required**: *No* / **Permission**: *read:account*
          */
         post: operations['mahjong___rooms'];
     };
@@ -3213,7 +3213,7 @@ export type paths = {
          * mahjong/show-room
          * @description No description provided.
          *
-         *     **Credential required**: *Yes* / **Permission**: *read:account*
+         *     **Credential required**: *No* / **Permission**: *read:account*
          */
         post: operations['mahjong___show-room'];
     };

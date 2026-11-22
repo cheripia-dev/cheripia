@@ -9,7 +9,7 @@ import { MahjongService } from '@/core/MahjongService.js';
 import { ApiError } from '../../error.js';
 
 export const meta = {
-	requireCredential: true,
+	requireCredential: false,
 
 	kind: 'read:account',
 
@@ -48,7 +48,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				throw new ApiError(meta.errors.noSuchRoom);
 			}
 
-			if (!this.mahjongService.isMember(room, me)) {
+			if (me == null || !this.mahjongService.isMember(room, me)) {
 				if (room.isStarted && !room.isEnded) {
 					return await this.mahjongService.packSpectatorRoom(room);
 				}

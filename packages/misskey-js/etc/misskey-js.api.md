@@ -1128,6 +1128,7 @@ export type Channels = {
                 callee: MahjongHouse;
                 tiles: readonly [number, number, number, number];
                 rinsyan: number;
+                doraIndicateTiles: number[];
             }) => void;
             ciied: (payload: {
                 caller: MahjongHouse;
@@ -1138,28 +1139,53 @@ export type Channels = {
                 callers: MahjongHouse[];
                 callee: MahjongHouse;
                 handTiles: Record<MahjongHouse, number[]>;
+                ronTile?: number;
+                chankan?: boolean;
+                uraDoraIndicateTiles: number[];
             }) => void;
-            ryuukyoku: (payload: unknown) => void;
+            ryuukyoku: (payload: {
+                tenpaiHouses: MahjongHouse[];
+                notenHouses: MahjongHouse[];
+                pointDeltas: Record<MahjongHouse, number>;
+                abortive?: string;
+                nagashiHouses?: MahjongHouse[];
+            }) => void;
             ankanned: (payload: {
                 house: MahjongHouse;
                 tiles: readonly [number, number, number, number];
                 rinsyan: number;
+                doraIndicateTiles: number[];
             }) => void;
             kakanned: (payload: {
                 house: MahjongHouse;
                 tiles: readonly [number, number, number, number];
                 rinsyan: number;
                 from: MahjongHouse;
+                doraIndicateTiles: number[];
+            }) => void;
+            kakanDeclared: (payload: {
+                house: MahjongHouse;
+                tiles: readonly [number, number, number, number];
+                from: MahjongHouse;
+                doraIndicateTiles: number[];
             }) => void;
             tsumoHora: (payload: {
                 house: MahjongHouse;
                 handTiles: number[];
                 tsumoTile: number;
+                uraDoraIndicateTiles: number[];
             }) => void;
         };
         receives: {
             ready: boolean;
             addAi: Record<string, never>;
+            updateSettings: {
+                key: 'timeLimitForEachTurn';
+                value: number;
+            } | {
+                key: 'matchLength';
+                value: 'east' | 'south';
+            };
             removeAi: {
                 index: number;
             };

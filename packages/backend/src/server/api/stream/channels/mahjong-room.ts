@@ -18,7 +18,7 @@ import Channel, { type ChannelRequest } from '../channel.js';
 export class MahjongRoomChannel extends Channel {
 	public readonly chName = 'mahjongRoom';
 	public static shouldShare = false;
-	public static requireCredential = true as const;
+	public static requireCredential = false as const;
 	public static kind = 'read:account';
 	private roomId: string | null = null;
 	private myHouse: 'e' | 's' | 'w' | 'n' | null = null;
@@ -38,11 +38,10 @@ export class MahjongRoomChannel extends Channel {
 		if (typeof params.roomId !== 'string') return;
 		this.roomId = params.roomId;
 
-		if (this.user == null) return;
 		const room = await this.mahjongService.getRoom(this.roomId);
 		if (room == null) return;
 
-		if (this.mahjongService.isMember(room, this.user)) {
+		if (this.user != null && this.mahjongService.isMember(room, this.user)) {
 			this.myHouse = this.mahjongService.getHouseOfUser(room, this.user);
 		} else if (room.isStarted && !room.isEnded) {
 			this.spectator = true;
@@ -61,8 +60,6 @@ export class MahjongRoomChannel extends Channel {
 
 	@bindThis
 	private async onMahjongRoomStreamMessage(message: GlobalEvents['mahjongRoom']['payload']) {
-		if (this.user == null) return;
-
 		if (this.spectator) {
 			const room = await this.mahjongService.getRoom(this.roomId!);
 			if (room == null) return;
@@ -71,6 +68,8 @@ export class MahjongRoomChannel extends Channel {
 			});
 			return;
 		}
+
+		if (this.user == null) return;
 
 		if (message.type === 'started' || message.type === 'nextKyoku' || message.type === 'ended') {
 			if (message.type !== 'ended') {

@@ -16455,6 +16455,18 @@ export interface Locale extends ILocale {
              * 地和
              */
             "chiho": string;
+            /**
+             * 数え役満
+             */
+            "kazoeyakuman": string;
+            /**
+             * 人和
+             */
+            "renhou": string;
+            /**
+             * 流し満貫
+             */
+            "nagashimangan": string;
         };
     };
 }
