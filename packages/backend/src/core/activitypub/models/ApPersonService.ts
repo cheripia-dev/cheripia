@@ -484,7 +484,7 @@ export class ApPersonService implements OnModuleInit {
 				if (person._misskey_summary) {
 					_description = truncate(person._misskey_summary, summaryLength);
 				} else if (person.summary) {
-					_description = this.apMfmService.htmlToMfm(truncate(person.summary, summaryLength), person.tag);
+					_description = this.apMfmService.htmlToMfm(truncate(person.summary, summaryLength), { tag: person.tag });
 				}
 				if (isChannel) {
 					const channel = await transactionalEntityManager.save(new MiChannel({
@@ -494,6 +494,7 @@ export class ApPersonService implements OnModuleInit {
 						host,
 						userId: channelModerator?.id ?? user.id,
 						actorId: user.id,
+						isSensitive: person.sensitive === true,
 					}));
 					await transactionalEntityManager.update(MiUser, {
 						id: user.id,
@@ -682,7 +683,7 @@ export class ApPersonService implements OnModuleInit {
 		if (person._misskey_summary) {
 			_description = truncate(person._misskey_summary, summaryLength);
 		} else if (person.summary) {
-			_description = this.apMfmService.htmlToMfm(truncate(person.summary, summaryLength), person.tag);
+			_description = this.apMfmService.htmlToMfm(truncate(person.summary, summaryLength), { tag: person.tag });
 		}
 		let channelId = null as MiChannel['id'] | null;
 		if (getApType(object) === 'Group') {
@@ -696,13 +697,15 @@ export class ApPersonService implements OnModuleInit {
 			} catch(e) {
 				this.logger.warn(`Failed Resolve ChannelModerator: ${person.id}`);
 			}
+			const isSensitive = person.sensitive === true;
 			if (_channel) {
 				channelId = _channel.id;
-				if (_channel.description !== _description || _channel.name !== displayName || channelModerator?.id !== _channel.userId) {
+				if (_channel.description !== _description || _channel.name !== displayName || channelModerator?.id !== _channel.userId || isSensitive !== _channel.isSensitive) {
 					await this.channelsRepository.update({ actorId: exist.id }, {
 						name: displayName,
 						description: _description,
 						userId: channelModerator?.id ?? undefined,
+						isSensitive,
 					});
 				}
 			} else {
@@ -714,6 +717,7 @@ export class ApPersonService implements OnModuleInit {
 					actorId: exist.id,
 					host: exist.host,
 					description: _description,
+					isSensitive,
 				});
 				channelId = channel.id;
 			}
@@ -910,7 +914,7 @@ export class ApPersonService implements OnModuleInit {
 			if (ap._misskey_sectionName) {
 				name = truncate(ap._misskey_sectionName, summaryLength);
 			} else if (ap.sectionName) {
-				name = this.apMfmService.htmlToMfm(truncate(ap.sectionName, summaryLength), person.tag);
+				name = this.apMfmService.htmlToMfm(truncate(ap.sectionName, summaryLength), { tag: person.tag });
 			}
 			if (!Array.isArray(ap.entrys)) return null;
 			const entrys = ap.entrys.slice(0, role_policy.mutualLinkLimit + 1);
@@ -925,7 +929,7 @@ export class ApPersonService implements OnModuleInit {
 				if (entry._misskey_description) {
 					description = truncate(entry._misskey_description, summaryLength);
 				} else if (entry.description) {
-					description = this.apMfmService.htmlToMfm(truncate(entry.description, summaryLength), person.tag);
+					description = this.apMfmService.htmlToMfm(truncate(entry.description, summaryLength), { tag: person.tag });
 				}
 				return {
 					fileId: image.id,
