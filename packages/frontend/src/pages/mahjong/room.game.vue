@@ -962,6 +962,15 @@ function switchAutoMode(mode: AutoMode) {
 	autoMode[mode] = !autoMode[mode];
 }
 
+/**
+ * 自動モードをすべて解除する。前の局の設定を持ち越さないように、次局の開始時に呼ぶ。
+ */
+function resetAutoModes() {
+	for (const mode of autoModes) {
+		autoMode[mode] = false;
+	}
+}
+
 function riichi() {
 	if (!isMyTurn.value) return;
 
@@ -1371,6 +1380,7 @@ function onStreamNextKyoku(log: { room: Misskey.entities.MahjongRoomDetailed }) 
 
 	iTsumoed.value = false;
 	lastAutoKey = null;
+	resetAutoModes();
 	showKyokuResults.value = false;
 	kyokuResults.value = {
 		e: null,

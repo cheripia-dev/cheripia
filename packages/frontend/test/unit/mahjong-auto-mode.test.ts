@@ -178,6 +178,37 @@ describe('room.game auto mode toggle', () => {
 		assert.ok(!leftGroup!.contains(toggle), 'the toggles must not sit next to the turn timer, which appears and disappears');
 	});
 
+	test('clears every mode when the next kyoku starts', async () => {
+		const { container, connection } = renderRoomGame(createPlayerState());
+
+		await enableAutoMode(container, 'notCall');
+		await enableAutoMode(container, 'tsumogiri');
+		await enableAutoMode(container, 'hora');
+
+		connection.emit('nextKyoku', {
+			room: {
+				id: 'room',
+				isStarted: true,
+				isEnded: false,
+				user1Id: 'u1',
+				user2Id: 'u2',
+				user3Id: 'u3',
+				user4Id: 'u4',
+				user1: { id: 'u1', username: 'u1', name: null },
+				user2: { id: 'u2', username: 'u2', name: null },
+				user3: { id: 'u3', username: 'u3', name: null },
+				user4: { id: 'u4', username: 'u4', name: null },
+				timeLimitForEachTurn: 30,
+				gameState: createPlayerState({ kyoku: 2 }),
+			},
+		});
+		await nextTick();
+
+		for (const mode of ['notCall', 'tsumogiri', 'hora'] as AutoModeKey[]) {
+			assert.strictEqual(modeToggle(container, mode).getAttribute('aria-pressed'), 'false', `${mode} should be cleared in the next kyoku`);
+		}
+	});
+
 	test('marks the pressed mode with the active style', async () => {
 		const { container } = renderRoomGame(createPlayerState());
 
