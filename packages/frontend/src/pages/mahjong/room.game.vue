@@ -28,6 +28,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div :class="$style.statusBarLeft">
 			<div :class="$style.roundInfo">{{ roundLabel }}</div>
 			<div v-if="timerVisible" :class="$style.turnTimer">{{ timerLabel }}</div>
+			<div v-if="!room.isEnded && props.connection != null && isPlayer" :class="$style.autoModeToggle">
+				<MkButton
+					v-for="mode in autoModes"
+					:key="mode"
+					:class="[$style.autoModeToggleItem, { [$style.autoModeToggleOn]: autoMode[mode] }]"
+					:data-testid="`mahjong-auto-mode-${mode}`"
+					small
+					:transparent="!autoMode[mode]"
+					:aria-pressed="autoMode[mode]"
+					@click="switchAutoMode(mode)"
+				>
+					{{ autoModeLabel(mode) }}
+				</MkButton>
+			</div>
 		</div>
 		<div :class="$style.doraIndicators">
 			<span :class="$style.doraIndicatorLabel">{{ i18n.ts._mahjong.dora }}</span>
@@ -302,15 +316,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 
 		<div v-if="!tsumoPending" :class="$style.actions" class="_buttons">
-			<MkButton v-if="mj.canRon != null" primary gradate @click="ron">{{ i18n.ts._mahjong.ron }}</MkButton>
-			<MkButton v-if="mj.canPon != null" primary @click="pon">{{ i18n.ts._mahjong.pon }}</MkButton>
-			<MkButton v-if="mj.canCii != null" primary @click="cii">{{ i18n.ts._mahjong.cii }}</MkButton>
-			<MkButton v-if="mj.canKan != null" primary @click="kan">{{ i18n.ts._mahjong.kan }}</MkButton>
-			<MkButton v-if="mj.canRon != null || mj.canPon != null || mj.canCii != null || mj.canKan != null" @click="skip">{{ i18n.ts._mahjong.skip }}</MkButton>
-			<MkButton v-if="isMyTurn && mj.canAnkan()" @click="ankan">{{ i18n.ts._mahjong.ankan }}</MkButton>
-			<MkButton v-if="isMyTurn && mj.canKakan()" @click="kakan">{{ i18n.ts._mahjong.kakan }}</MkButton>
-			<MkButton v-if="isMyTurn && canHora" primary gradate @click="tsumoHora">{{ i18n.ts._mahjong.tsumo }}</MkButton>
-			<MkButton v-if="isMyTurn && mj.canRiichi()" primary @click="riichi">{{ i18n.ts._mahjong.riichi }}</MkButton>
+			<MkButton v-if="mj.canRon != null" primary gradate data-testid="mahjong-action-ron" @click="ron">{{ i18n.ts._mahjong.ron }}</MkButton>
+			<MkButton v-if="mj.canPon != null && !autoMode.notCall" primary data-testid="mahjong-action-pon" @click="pon">{{ i18n.ts._mahjong.pon }}</MkButton>
+			<MkButton v-if="mj.canCii != null && !autoMode.notCall" primary data-testid="mahjong-action-cii" @click="cii">{{ i18n.ts._mahjong.cii }}</MkButton>
+			<MkButton v-if="mj.canKan != null && !autoMode.notCall" primary data-testid="mahjong-action-kan" @click="kan">{{ i18n.ts._mahjong.kan }}</MkButton>
+			<MkButton v-if="mj.canRon != null || mj.canPon != null || mj.canCii != null || mj.canKan != null" data-testid="mahjong-action-skip" @click="skip">{{ i18n.ts._mahjong.skip }}</MkButton>
+			<MkButton v-if="isMyTurn && mj.canAnkan() && !suppressOwnOptions" data-testid="mahjong-action-ankan" @click="ankan">{{ i18n.ts._mahjong.ankan }}</MkButton>
+			<MkButton v-if="isMyTurn && mj.canKakan() && !suppressOwnOptions" data-testid="mahjong-action-kakan" @click="kakan">{{ i18n.ts._mahjong.kakan }}</MkButton>
+			<MkButton v-if="isMyTurn && canHora" primary gradate data-testid="mahjong-action-tsumo" @click="tsumoHora">{{ i18n.ts._mahjong.tsumo }}</MkButton>
+			<MkButton v-if="isMyTurn && mj.canRiichi() && !suppressOwnOptions" primary data-testid="mahjong-action-riichi" @click="riichi">{{ i18n.ts._mahjong.riichi }}</MkButton>
 			<MkButton v-if="tileSelection != null" @click="cancelTileSelection">{{ i18n.ts.cancel }}</MkButton>
 		</div>
 	</div>
@@ -400,7 +414,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref, shallowRef, triggerRef, watch } from 'vue';
+import { computed, onActivated, onDeactivated, onMounted, onScopeDispose, onUnmounted, reactive, ref, shallowRef, triggerRef, watch } from 'vue';
 import * as Misskey from 'misskey-js';
 import * as Mmj from 'misskey-mahjong';
 import { useInterval } from '@@/js/use-interval.js';
@@ -442,6 +456,7 @@ const props = defineProps<{
 
 const room = ref<Misskey.entities.MahjongRoomDetailed>(deepClone(props.room));
 const myUserNumber = computed(() => room.value.user1Id === $i.id ? 1 : room.value.user2Id === $i.id ? 2 : room.value.user3Id === $i.id ? 3 : 4);
+const isPlayer = computed(() => room.value.user1Id === $i.id || room.value.user2Id === $i.id || room.value.user3Id === $i.id || room.value.user4Id === $i.id);
 const mj = shallowRef(new Mmj.PlayerGameEngine(myUserNumber.value, room.value.gameState as unknown as Mmj.PlayerState));
 const houses: Mmj.House[] = ['e', 's', 'w', 'n'];
 const endedHouses = computed<Mmj.House[]>(() => [...houses].sort((a, b) => mj.value.points[b] - mj.value.points[a]));
@@ -454,6 +469,38 @@ const isMyTurn = computed(() => {
 const canHora = computed(() => {
 	return isMyTurn.value && iTsumoed.value && mj.value.canTsumoHora();
 });
+
+//#region 自動モード (鳴き無し / 自動ツモ切り / 自動和了)
+type AutoMode = 'notCall' | 'tsumogiri' | 'hora';
+
+const autoModes: AutoMode[] = ['notCall', 'tsumogiri', 'hora'];
+
+function autoModeLabel(mode: AutoMode): string {
+	return mode === 'notCall'
+		? i18n.ts._mahjong.autoNoCall
+		: mode === 'tsumogiri'
+			? i18n.ts._mahjong.autoTsumogiri
+			: i18n.ts._mahjong.autoHora;
+}
+
+/**
+ * 自動モードの ON/OFF。対局ページ内でだけ持つ (リロードや次の対局では OFF に戻る)。
+ * - notCall: 鳴き無し。ポン・チー・大明槓を求められたら自動でパスし、そのボタンも出さない。
+ * - tsumogiri: 自動ツモ切り。自分の手番でツモ牌を自動で打つ。
+ * - hora: 自動和了。和了できる牌が出たとき自動で和了する。
+ */
+const autoMode = reactive<Record<AutoMode, boolean>>({
+	notCall: false,
+	tsumogiri: false,
+	hora: false,
+});
+
+/**
+ * 自動ツモ切りが、自分の手番の選択肢 (暗槓・加槓・リーチ) を隠す状態。
+ * 鳴き無しモードと組み合わせたときだけ、槓・リーチも止めずにツモ切りする。
+ */
+const suppressOwnOptions = computed(() => autoMode.tsumogiri && autoMode.notCall);
+//#endregion
 
 const users = computed(() => ({
 	e: houseToUser('e'),
@@ -500,7 +547,8 @@ const ponSerifHouses = reactive<Record<Mmj.House, boolean>>({ e: false, s: false
 const kanSerifHouses = reactive<Record<Mmj.House, boolean>>({ e: false, s: false, w: false, n: false });
 const tsumoSerifHouses = reactive<Record<Mmj.House, boolean>>({ e: false, s: false, w: false, n: false });
 const riichiSerifHouses = reactive<Record<Mmj.House, boolean>>({ e: false, s: false, w: false, n: false });
-const iTsumoed = ref(false);
+// ページを途中から開いたとき、すでにツモっていればツモ和了を選べるようにする
+const iTsumoed = ref(mj.value.turn === mj.value.myHouse && mj.value.drawnTile != null);
 const showKyokuResults = ref(false);
 const kyokuResults = ref<Record<Mmj.House, {
 	yakus: {
@@ -699,6 +747,122 @@ const timerLabel = computed(() => {
 		: remaining;
 });
 
+//#region 自動モードの送信
+/** 牌をめくれてから自動で牌を打つまでの間隔。操作が見える程度に少し待つ。 */
+const AUTO_ACTION_MS = 300;
+
+let autoTimer: number | undefined = undefined;
+let lastAutoKey: string | null = null;
+
+function cancelAutoTimer() {
+	if (autoTimer !== undefined) {
+		window.clearTimeout(autoTimer);
+		autoTimer = undefined;
+	}
+}
+
+/**
+ * 自動モードが牌を打つ機会を識別する文字列。
+ * 同じ機会に対して自動送信を二重に送らないための目印にする。
+ */
+function currentAutoKey(): string | null {
+	// 鳴き・ロンを求められている機会。
+	// 副露・嶺上開花・槍槓で同じ callee のまま要求が続くことがあるため、
+	// 要求されている選択肢そのものをキーに含めて区別する。
+	if (hasCall.value) {
+		return [
+			'call',
+			callTargetHouse.value,
+			mj.value.hoTiles[callTargetHouse.value!].length,
+			mj.value.canRon != null ? 'ron' : '',
+			mj.value.canPon != null ? 'pon' : '',
+			mj.value.canCii != null ? 'cii' : '',
+			mj.value.canKan != null ? 'kan' : '',
+		].join(':');
+	}
+	// 自分の手番でツモ牌を打つ機会
+	if (isMyTurn.value && !showKyokuResults.value && mj.value.drawnTile != null) {
+		return `tsumogiri:${mj.value.turnCount}:${mj.value.drawnTile}`;
+	}
+	return null;
+}
+
+function runAutoActions() {
+	autoTimer = undefined;
+
+	if (props.connection == null || room.value.isEnded || tsumoPending.value || showKyokuResults.value) return;
+
+	const key = currentAutoKey();
+	if (key == null) {
+		lastAutoKey = null;
+		return;
+	}
+	if (key === lastAutoKey) return;
+
+	// 鳴き・ロンを求められている場合
+	if (hasCall.value) {
+		if (autoMode.hora && mj.value.canRon != null) {
+			lastAutoKey = key;
+			ron();
+		} else if (autoMode.notCall && mj.value.canRon == null) {
+			lastAutoKey = key;
+			skip();
+		}
+		return;
+	}
+
+	// 自分の手番 (ツモ牌を打つか、ツモ和了するか)
+	if (!isMyTurn.value) return;
+
+	const drawnTile = mj.value.drawnTile;
+	if (drawnTile == null) return;
+
+	if (canHora.value) {
+		// 自動和了がオフなら、ツモ和了の判断をプレイヤーに委ねる
+		if (!autoMode.hora) return;
+		lastAutoKey = key;
+		tsumoHora();
+		return;
+	}
+
+	if (!autoMode.tsumogiri) return;
+
+	// リーチ中はサーバーが自動でツモ切りするため、二重に送信しない
+	if (mj.value.riichis[mj.value.myHouse]) return;
+
+	// 牌選択中 (槓・リーチの牌を選んでいる最中) は割り込まない
+	if (tileSelection.value != null) return;
+
+	// 槓・リーチができる場面では、鳴き無しと併用していない限りプレイヤーに委ねる
+	if (!suppressOwnOptions.value && (mj.value.canAnkan() || mj.value.canKakan() || mj.value.canRiichi())) return;
+
+	lastAutoKey = key;
+	chooseTile(drawnTile);
+}
+
+watch(
+	[mj, isMyTurn, hasCall, canHora, showKyokuResults, tsumoPending, () => autoMode.notCall, () => autoMode.tsumogiri, () => autoMode.hora],
+	() => {
+		const key = currentAutoKey();
+		if (
+			key == null ||
+			props.connection == null ||
+			room.value.isEnded ||
+			tsumoPending.value ||
+			showKyokuResults.value ||
+			key === lastAutoKey
+		) {
+			cancelAutoTimer();
+			return;
+		}
+		cancelAutoTimer();
+		autoTimer = window.setTimeout(runAutoActions, AUTO_ACTION_MS);
+	},
+);
+
+onScopeDispose(cancelAutoTimer);
+//#endregion
+
 /*
 const TIMER_INTERVAL_SEC = 3;
 if (!props.room.isEnded) {
@@ -751,7 +915,7 @@ function backToLobby() {
 	router.push('/mahjong');
 }
 
-function chooseTile(tile: Mmj.TileId, ev: MouseEvent) {
+function chooseTile(tile: Mmj.TileId, ev?: MouseEvent) {
 	if (tsumoPending.value) return;
 	if (!isMyTurn.value) return;
 
@@ -790,6 +954,12 @@ function chooseTile(tile: Mmj.TileId, ev: MouseEvent) {
 			tile: tile,
 		});
 	}
+}
+
+function switchAutoMode(mode: AutoMode) {
+	// モードを切り替えた直後の機会も自動で打てるように、目印をリセットする
+	lastAutoKey = null;
+	autoMode[mode] = !autoMode[mode];
 }
 
 function riichi() {
@@ -1200,6 +1370,7 @@ function onStreamNextKyoku(log: { room: Misskey.entities.MahjongRoomDetailed }) 
 	triggerRef(mj);
 
 	iTsumoed.value = false;
+	lastAutoKey = null;
 	showKyokuResults.value = false;
 	kyokuResults.value = {
 		e: null,
@@ -1269,7 +1440,12 @@ function detachListeners() {
 
 onMounted(attachListeners);
 onActivated(attachListeners);
-onDeactivated(detachListeners);
+onDeactivated(() => {
+	// 画面から離れている間に自動送信しない (見えていない卓で牌を打たない)
+	detachListeners();
+	cancelAutoTimer();
+	lastAutoKey = null;
+});
 onUnmounted(detachListeners);
 onUnmounted(() => {
 	clearKyokuResultTimer();
@@ -1563,6 +1739,8 @@ onUnmounted(() => {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
+	// 自動モードのトグルを増やしたとき、狭い幅ではドラ表示行の下へ折り返させる。
+	flex-wrap: wrap;
 	gap: 12px;
 	width: 100%;
 	width: min(100%, calc((100vh - 170px) * 16 / 9));
@@ -2206,6 +2384,36 @@ onUnmounted(() => {
 	display: flex;
 	justify-content: center;
 	flex-wrap: wrap;
+}
+
+.autoModeToggle {
+	// 局表示・残り時間の右、ステータスバーに並べる。牌面と重ならない行なので
+	// 卓の広さに応じた調整は不要 (statusBar は .taku の container 外)。
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+.autoModeToggleItem {
+	// MkButton の min-width / padding は対局の操作ボタン用なので、状態表示用に縮める。
+	min-width: max-content;
+	padding: 3px 8px;
+	font-size: 11px;
+	// 卓画像の上でも読めるように影を付ける (.waitTilesLabel と同じ手)。
+	text-shadow: 0 1px 2px #000;
+
+	// MkButton の .root.transparent (特異度 0,2,0) に負けないよう、
+	// 自前も2クラスの特異度で上書きする。
+	&.autoModeToggleOn {
+		background: var(--MI_THEME-accent);
+		color: var(--MI_THEME-fgOnAccent);
+
+		&:not(:disabled):hover,
+		&:not(:disabled):active {
+			background: color-mix(in srgb, var(--MI_THEME-accent) 85%, var(--MI_THEME-fg));
+		}
+	}
 }
 
 .ciiChoicePanel {

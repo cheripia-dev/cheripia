@@ -16161,6 +16161,18 @@ export interface Locale extends ILocale {
          */
         "skip": string;
         /**
+         * 鳴き無し
+         */
+        "autoNoCall": string;
+        /**
+         * 自動ツモ切り
+         */
+        "autoTsumogiri": string;
+        /**
+         * 自動和了
+         */
+        "autoHora": string;
+        /**
          * 確認
          */
         "confirm": string;

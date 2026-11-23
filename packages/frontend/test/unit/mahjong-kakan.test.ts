@@ -53,13 +53,15 @@ function createConnection() {
 }
 
 function createPlayerState(preset: Partial<Mmj.PlayerState> = {}): Mmj.PlayerState {
-	return {
+	const base: Mmj.PlayerState = {
 		user1House: 'e',
 		user2House: 's',
 		user3House: 'w',
 		user4House: 'n',
 		round: 'e',
 		kyoku: 1,
+		honba: 0,
+		kyotaku: 0,
 		turnCount: 0,
 		tilesCount: 69,
 		doraIndicateTiles: [125],
@@ -85,8 +87,8 @@ function createPlayerState(preset: Partial<Mmj.PlayerState> = {}): Mmj.PlayerSta
 		canCii: null,
 		canKan: null,
 		canRon: null,
-		...preset,
 	};
+	return { ...base, ...preset };
 }
 
 function renderRoomGame(state: Mmj.PlayerState, isEnded = false) {
@@ -132,6 +134,11 @@ async function findKakanButton(buttons: HTMLElement[]): Promise<HTMLElement> {
 	const button = buttons.find(b => b.textContent?.includes('加槓'));
 	assert.ok(button, 'kakan button should be visible');
 	return button;
+}
+
+/** 和了牌をツモったときに出るツモボタン (自動ツモ切りのトグルと区別するため testid で拾う) */
+function tsumoHoraButton(container: Element): HTMLElement | null {
+	return container.querySelector<HTMLElement>('[data-testid="mahjong-action-tsumo"]');
 }
 
 function sentActions(send: ReturnType<typeof vi.fn>, type: string) {
@@ -568,7 +575,7 @@ describe('room.game abortive draw', () => {
 describe('room.game tsumo', () => {
 	test('hides action buttons after tsumo press and restores on next event', async () => {
 		const zeros = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-		const { container, findAllByRole, queryAllByRole, connection } = renderRoomGame(createPlayerState({
+		const { container, connection } = renderRoomGame(createPlayerState({
 			turn: 'e',
 			handTiles: {
 				e: [1, 5, 9, 57, 58, 59, 93, 97, 101, 121, 122, 123, 10],
@@ -582,8 +589,7 @@ describe('room.game tsumo', () => {
 		connection.emit('tsumo', { house: 'e', tile: 11 });
 		await nextTick();
 
-		const buttons = await findAllByRole('button');
-		const tsumoButton = buttons.find(b => b.textContent?.includes('ツモ'));
+		const tsumoButton = tsumoHoraButton(container);
 		assert.ok(tsumoButton, 'tsumo button should be visible after tsumo');
 
 		const actionsOf = () => container.querySelector('[class*="actions"]');
@@ -600,12 +606,12 @@ describe('room.game tsumo', () => {
 		await nextTick();
 
 		assert.ok(actionsOf(), 'actions should be restored on next event');
-		assert.ok(!queryAllByRole('button').some(b => b.textContent?.includes('ツモ')), 'tsumo button should not remain when turn moves');
+		assert.ok(!tsumoHoraButton(container), 'tsumo button should not remain when turn moves');
 	});
 
 	test('ignores hand tile clicks while tsumo is pending', async () => {
 		const zeros = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-		const { container, findAllByRole, connection } = renderRoomGame(createPlayerState({
+		const { container, connection } = renderRoomGame(createPlayerState({
 			turn: 'e',
 			handTiles: {
 				e: [1, 5, 9, 57, 58, 59, 93, 97, 101, 121, 122, 123, 10],
@@ -618,7 +624,7 @@ describe('room.game tsumo', () => {
 		connection.emit('tsumo', { house: 'e', tile: 11 });
 		await nextTick();
 
-		const tsumoButton = (await findAllByRole('button')).find(b => b.textContent?.includes('ツモ'));
+		const tsumoButton = tsumoHoraButton(container);
 		assert.ok(tsumoButton, 'tsumo button should be visible after tsumo');
 		await fireEvent.click(tsumoButton);
 		await nextTick();
@@ -652,7 +658,7 @@ describe('room.game tsumo', () => {
 		await nextTick();
 		assert.ok(queryAllByRole('button').some(b => b.textContent?.includes('キャンセル') === true || b.textContent?.includes('Cancel') === true), 'cancel button should be visible during tile selection');
 
-		const tsumoButton = queryAllByRole('button').find(b => b.textContent?.includes('ツモ'));
+		const tsumoButton = tsumoHoraButton(container);
 		assert.ok(tsumoButton, 'tsumo button should be visible during tile selection');
 		await fireEvent.click(tsumoButton);
 		await nextTick();
