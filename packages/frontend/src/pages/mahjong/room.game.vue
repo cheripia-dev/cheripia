@@ -28,20 +28,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div :class="$style.statusBarLeft">
 			<div :class="$style.roundInfo">{{ roundLabel }}</div>
 			<div v-if="timerVisible" :class="$style.turnTimer">{{ timerLabel }}</div>
-			<div v-if="!room.isEnded && props.connection != null && isPlayer" :class="$style.autoModeToggle">
-				<MkButton
-					v-for="mode in autoModes"
-					:key="mode"
-					:class="[$style.autoModeToggleItem, { [$style.autoModeToggleOn]: autoMode[mode] }]"
-					:data-testid="`mahjong-auto-mode-${mode}`"
-					small
-					:transparent="!autoMode[mode]"
-					:aria-pressed="autoMode[mode]"
-					@click="switchAutoMode(mode)"
-				>
-					{{ autoModeLabel(mode) }}
-				</MkButton>
-			</div>
+		</div>
+		<div v-if="!room.isEnded && props.connection != null && isPlayer" :class="$style.autoModeToggle">
+			<MkButton
+				v-for="mode in autoModes"
+				:key="mode"
+				:class="[$style.autoModeToggleItem, { [$style.autoModeToggleOn]: autoMode[mode] }]"
+				:data-testid="`mahjong-auto-mode-${mode}`"
+				small
+				:transparent="!autoMode[mode]"
+				:aria-pressed="autoMode[mode]"
+				@click="switchAutoMode(mode)"
+			>
+				{{ autoModeLabel(mode) }}
+			</MkButton>
 		</div>
 		<div :class="$style.doraIndicators">
 			<span :class="$style.doraIndicatorLabel">{{ i18n.ts._mahjong.dora }}</span>
@@ -2387,12 +2387,14 @@ onUnmounted(() => {
 }
 
 .autoModeToggle {
-	// 局表示・残り時間の右、ステータスバーに並べる。牌面と重ならない行なので
-	// 卓の広さに応じた調整は不要 (statusBar は .taku の container 外)。
+	// 局表示・残り時間の行と同じステータスバーに置き、ドラ表示の左に寄せる。
+	// 残り時間は手番・鳴き確認でのみ幅が変わるので、この行の末尾 (右側) に
+	// 固定しておくと、表示・非表示でトグルが左右に動かない。
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
 	flex-shrink: 0;
+	margin-left: auto;
 }
 
 .autoModeToggleItem {

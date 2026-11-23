@@ -167,6 +167,17 @@ afterEach(() => {
 });
 
 describe('room.game auto mode toggle', () => {
+	test('stays out of the round info group so the turn timer cannot move it', () => {
+		const { container } = renderRoomGame(createPlayerState());
+
+		const leftGroup = container.querySelector('[class*="statusBarLeft"]');
+		assert.ok(leftGroup, 'the round info group should be rendered');
+		const toggle = container.querySelector('[data-testid="mahjong-auto-mode-notCall"]');
+		assert.ok(toggle, 'the toggles should be rendered in the status bar');
+		assert.ok(container.querySelector('[class*="statusBar"]')!.contains(toggle), 'the toggles belong to the status bar');
+		assert.ok(!leftGroup!.contains(toggle), 'the toggles must not sit next to the turn timer, which appears and disappears');
+	});
+
 	test('marks the pressed mode with the active style', async () => {
 		const { container } = renderRoomGame(createPlayerState());
 
