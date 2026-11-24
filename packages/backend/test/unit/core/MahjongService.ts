@@ -33,11 +33,12 @@ function createRoom(): MahjongRoom {
 		user3Ready: true,
 		user4Ready: true,
 		timeLimitForEachTurn: 30,
+		matchLength: 'south',
 	};
 }
 
 function createExhaustedState(): Mmj.MasterState {
-	// 山を空にし、他家が m1 を鳴けない手牌にして、asking なしの流局を作る
+	// 山を空にし、他家が m6 を鳴けない手牌にして、asking なしの流局を作る
 	return Mmj.MasterGameEngine.createInitialState({
 		tiles: [],
 		handTiles: {
@@ -50,11 +51,16 @@ function createExhaustedState(): Mmj.MasterState {
 }
 
 type CallingAnswersForTest = {
-	pon: null | boolean;
+	pon: Record<Mmj.House, boolean | null>;
 	cii: null | false | 'x__' | '_x_' | '__x';
-	kan: null | boolean;
+	kan: Record<Mmj.House, boolean | null>;
 	ron: Record<Mmj.House, null | boolean>;
 };
+
+// 指定した家だけ value の回答レコードを作るテスト用ヘルパー
+function answerRecord<T>(house: Mmj.House, value: T): Record<Mmj.House, T> {
+	return { e: null, s: null, w: null, n: null, [house]: value } as Record<Mmj.House, T>;
+}
 
 function createCallingRoom(options: { riichi?: boolean } = {}): MahjongRoom {
 	const room = createRoom();
@@ -80,9 +86,9 @@ function createCallingRoom(options: { riichi?: boolean } = {}): MahjongRoom {
 		},
 		askings: {
 			ron: { callee: 'e', callers: ['s', 'w'] },
-			pon: { callee: 'e', caller: 's' },
+			pon: { callee: 'e', callers: ['s'] },
 			cii: { callee: 'e', caller: 's' },
-			kan: { callee: 'e', caller: 's' },
+			kan: { callee: 'e', callers: ['s'] },
 		},
 		tiles: [52, 53, 54, 55, 56, 60, 64, 67, 68, 69, 70],
 		kingTiles: [125, 126, 127, 128],
@@ -157,9 +163,9 @@ function createCallingService(room: MahjongRoom) {
 	const store = new Map<string, string>();
 	store.set(`mahjong:room:${room.id}`, JSON.stringify(room));
 	store.set(`mahjong:gameCallingAsking:${room.id}`, JSON.stringify({
-		pon: null,
+		pon: { e: null, s: null, w: null, n: null },
 		cii: null,
-		kan: null,
+		kan: { e: null, s: null, w: null, n: null },
 		ron: { e: null, s: null, w: null, n: null },
 	} satisfies CallingAnswersForTest));
 
@@ -204,13 +210,14 @@ describe('MahjongService', () => {
 		);
 
 		try {
-			// m1 を捨てると山が尽きて asking なしの流局になる
+			// m6 を捨てると山が尽きて asking なしの流局になる
+			// (捨て牌が全幺九牌だと流し満貫達成になり notenHouses から除外されるため中牌を使う)
 			await (service as unknown as {
-				dahai: (room: MahjongRoom, mj: Mmj.MasterGameEngine, house: Mmj.House, tile: Mmj.TileId, riichi?: boolean) => Promise<void>;
-			}).dahai(room, mj, 'e', 1);
+				dahaiLocked: (room: MahjongRoom, mj: Mmj.MasterGameEngine, house: Mmj.House, tile: Mmj.TileId, riichi?: boolean) => Promise<void>;
+			}).dahaiLocked(room, mj, 'e', 21);
 
 			expect(published.map(call => call.type)).toEqual(['dahai', 'ryuukyoku']);
-			expect(published[0]!.payload).toEqual({ house: 'e', tile: 1, riichi: false });
+			expect(published[0]!.payload).toEqual({ house: 'e', tile: 21, riichi: false });
 			const ryuukyoku = published[1]!.payload as {
 				tenpaiHouses: Mmj.House[];
 				notenHouses: Mmj.House[];
@@ -227,7 +234,7 @@ describe('MahjongService', () => {
 			});
 			expect(room.gameState?.turn).toBeNull();
 			// 最後の捨て牌がエンジン状態の河に残っている
-			expect(room.gameState?.hoTiles.e.at(-1)).toBe(1);
+			expect(room.gameState?.hoTiles.e.at(-1)).toBe(21);
 		} finally {
 			service.dispose();
 		}
@@ -237,13 +244,14 @@ describe('MahjongService', () => {
 		const room = createRoom();
 		const state = createExhaustedState();
 		// 最後の捨て牌を済ませた状態で、鳴きの回答待ちから流局する
+		// (河が全幺九牌だと流し満貫達成になるため 44 = p3 の中牌で捨了済みにする)
 		state.handTiles.e.pop();
-		state.hoTiles.e.push(37);
+		state.hoTiles.e.push(44);
 		state.turn = null;
 		state.nextTurnAfterAsking = 's';
 		state.askings = {
 			ron: null,
-			pon: { callee: 'e', caller: 's' },
+			pon: { callee: 'e', callers: ['s'] },
 			cii: null,
 			kan: null,
 		};
@@ -266,15 +274,15 @@ describe('MahjongService', () => {
 		);
 
 		try {
-			const answers = {
-				pon: false,
-				cii: false as const,
-				kan: false,
+			const answers: CallingAnswersForTest = {
+				pon: answerRecord('s', false),
+				cii: false,
+				kan: { e: null, s: null, w: null, n: null },
 				ron: { e: false, s: false, w: false, n: false },
 			};
 			await (service as unknown as {
-				answer: (room: MahjongRoom, mj: Mmj.MasterGameEngine, callingAnswers: typeof answers) => Promise<void>;
-			}).answer(room, mj, answers);
+				answerLocked: (room: MahjongRoom, mj: Mmj.MasterGameEngine, callingAnswers: CallingAnswersForTest) => Promise<void>;
+			}).answerLocked(room, mj, answers);
 
 			expect(published.map(call => call.type)).toEqual(['ryuukyoku']);
 			const ryuukyoku = published[0]!.payload as {
@@ -303,9 +311,9 @@ describe('MahjongService', () => {
 
 			const answers = readCallingAnswers(store);
 			expect(answers.ron).toEqual({ e: null, s: true, w: null, n: null });
-			expect(answers.pon).toBe(false);
+			expect(answers.pon).toEqual(answerRecord('s', false));
 			expect(answers.cii).toBe(false);
-			expect(answers.kan).toBe(false);
+			expect(answers.kan).toEqual(answerRecord('s', false));
 		} finally {
 			service.dispose();
 		}
@@ -317,10 +325,10 @@ describe('MahjongService', () => {
 			await service.commit_pon('test-room', user2);
 
 			const answers = readCallingAnswers(store);
-			expect(answers.pon).toBe(true);
+			expect(answers.pon).toEqual(answerRecord('s', true));
 			expect(answers.cii).toBe(false);
-			expect(answers.kan).toBe(false);
-			expect(answers.ron).toEqual({ e: null, s: false, w: null, n: null });
+			expect(answers.kan).toEqual(answerRecord('s', false));
+			expect(answers.ron).toEqual(answerRecord('s', false));
 		} finally {
 			service.dispose();
 		}
@@ -333,9 +341,9 @@ describe('MahjongService', () => {
 
 			const answers = readCallingAnswers(store);
 			expect(answers.cii).toBe('_x_');
-			expect(answers.pon).toBe(false);
-			expect(answers.kan).toBe(false);
-			expect(answers.ron).toEqual({ e: null, s: false, w: null, n: null });
+			expect(answers.pon).toEqual(answerRecord('s', false));
+			expect(answers.kan).toEqual(answerRecord('s', false));
+			expect(answers.ron).toEqual(answerRecord('s', false));
 		} finally {
 			service.dispose();
 		}
@@ -347,10 +355,10 @@ describe('MahjongService', () => {
 			await service.commit_kan('test-room', user2);
 
 			const answers = readCallingAnswers(store);
-			expect(answers.kan).toBe(true);
-			expect(answers.pon).toBe(false);
+			expect(answers.kan).toEqual(answerRecord('s', true));
+			expect(answers.pon).toEqual(answerRecord('s', false));
 			expect(answers.cii).toBe(false);
-			expect(answers.ron).toEqual({ e: null, s: false, w: null, n: null });
+			expect(answers.ron).toEqual(answerRecord('s', false));
 		} finally {
 			service.dispose();
 		}
@@ -362,9 +370,9 @@ describe('MahjongService', () => {
 			await service.commit_pon('test-room', user2);
 
 			const answers = readCallingAnswers(store);
-			expect(answers.pon).toBe(false);
+			expect(answers.pon).toEqual(answerRecord('s', false));
 			expect(answers.cii).toBeNull();
-			expect(answers.kan).toBeNull();
+			expect(answers.kan).toEqual({ e: null, s: null, w: null, n: null });
 			expect(answers.ron).toEqual({ e: null, s: null, w: null, n: null });
 		} finally {
 			service.dispose();
@@ -379,8 +387,8 @@ describe('MahjongService', () => {
 
 			const answers = readCallingAnswers(store);
 			expect(answers.cii).toBe(false);
-			expect(answers.pon).toBeNull();
-			expect(answers.kan).toBeNull();
+			expect(answers.pon).toEqual({ e: null, s: null, w: null, n: null });
+			expect(answers.kan).toEqual({ e: null, s: null, w: null, n: null });
 			expect(answers.ron).toEqual({ e: null, s: null, w: null, n: null });
 		} finally {
 			service.dispose();
