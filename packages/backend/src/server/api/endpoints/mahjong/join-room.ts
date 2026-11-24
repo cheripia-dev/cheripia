@@ -29,6 +29,11 @@ export const meta = {
 			code: 'GAME_STARTED',
 			id: '3f7d2b0a-1b4a-4f6e-8c1d-9e2a5b7c8d90',
 		},
+		notInvited: {
+			message: 'You are not invited to this room.',
+			code: 'NOT_INVITED',
+			id: '4be8bfc2-acb5-46b4-b4b8-cb8c12050686',
+		},
 	},
 
 	res: {
@@ -62,9 +67,28 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				throw new ApiError(meta.errors.gameStarted);
 			}
 
+			// 招待制のルームは、参加者と招待されたユーザーだけが参加できる
+			if (room.isInviteOnly && !this.mahjongService.isMember(room, me) && !this.mahjongService.isInvited(room, me.id)) {
+				throw new ApiError(meta.errors.notInvited);
+			}
+
 			const joined = await this.mahjongService.joinRoom(room.id, me);
 
 			if (joined == null) {
+				// チェック後にルーム状態が変わった競合は、満員と区別して返す
+				const latest = await this.mahjongService.getRoom(room.id);
+
+				if (latest == null) {
+					throw new ApiError(meta.errors.noSuchRoom);
+				}
+				if (!this.mahjongService.isMember(latest, me)) {
+					if (latest.isStarted) {
+						throw new ApiError(meta.errors.gameStarted);
+					}
+					if (latest.isInviteOnly && !this.mahjongService.isInvited(latest, me.id)) {
+						throw new ApiError(meta.errors.notInvited);
+					}
+				}
 				throw new ApiError(meta.errors.roomFull);
 			}
 

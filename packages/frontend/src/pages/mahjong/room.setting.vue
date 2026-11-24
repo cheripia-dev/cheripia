@@ -9,7 +9,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 		<div class="_gaps">
 			<div class="_panel" style="padding: 16px;">
 				<div style="font-size: 90%; opacity: 0.8; margin-bottom: 8px;">
-					このURLを同じインスタンスのユーザーに共有してください。
+					{{ room.isInviteOnly ? i18n.ts._mahjong.inviteOnlyShareUrlHint : i18n.ts._mahjong.shareUrlHint }}
 				</div>
 				<div style="display: flex; gap: 8px; align-items: center;">
 					<code style="flex: 1; overflow: hidden; text-overflow: ellipsis;">{{ roomUrl }}</code>
@@ -50,10 +50,28 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<div v-if="isOwner && !room.isStarted && !room.isEnded" style="margin-top: 8px;">
 					<MkRadios v-model="matchLength" :options="matchLengthOptions"/>
 				</div>
+				<div style="margin-top: 8px; font-size: 90%; opacity: 0.8;">
+					{{ i18n.ts._mahjong.inviteOnly }}: {{ room.isInviteOnly ? i18n.ts.yes : i18n.ts.no }}
+				</div>
+				<div v-if="isOwner && !room.isStarted && !room.isEnded" style="margin-top: 8px;">
+					<MkSwitch v-model="inviteOnly">{{ i18n.ts._mahjong.inviteOnlyDescription }}</MkSwitch>
+				</div>
 			</div>
 
-			<div v-if="isOwner" class="_buttonsCenter">
-				<MkButton rounded @click="addCpu">{{ i18n.ts._mahjong.addCpu }}</MkButton>
+			<div v-if="room.invitations.length > 0" class="_panel" style="padding: 16px;">
+				<div style="font-size: 90%; opacity: 0.8;">{{ i18n.ts._mahjong.invitedUsers }}</div>
+				<div v-for="invitation in room.invitations" :key="invitation.userId" :class="$style.seat">
+					<MkAvatar v-if="invitation.user" :user="invitation.user" :class="$style.seatAvatar"/>
+					<span :class="$style.seatName">{{ invitationName(invitation) }}</span>
+					<div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+						<MkButton v-if="canCancelInvitation(invitation)" small danger @click="cancelInvite(invitation)">{{ i18n.ts._mahjong.cancelInvite }}</MkButton>
+					</div>
+				</div>
+			</div>
+
+			<div class="_buttonsCenter">
+				<MkButton v-if="canInvite" rounded primary @click="invite">{{ i18n.ts._mahjong.invite }}</MkButton>
+				<MkButton v-if="isOwner" rounded @click="addCpu">{{ i18n.ts._mahjong.addCpu }}</MkButton>
 			</div>
 		</div>
 	</MkSpacer>
@@ -81,10 +99,12 @@ import { i18n } from '@/i18n.js';
 import { ensureSignin } from '@/i.js';
 import { deepClone } from '@/utility/clone.js';
 import { copyToClipboard } from '@/utility/copy-to-clipboard.js';
+import { misskeyApi } from '@/utility/misskey-api.js';
 import type { MkRadiosOption } from '@/components/MkRadios.vue';
 import MkButton from '@/components/MkButton.vue';
 import MkInput from '@/components/MkInput.vue';
 import MkRadios from '@/components/MkRadios.vue';
+import MkSwitch from '@/components/MkSwitch.vue';
 import * as os from '@/os.js';
 import { useRouter } from '@/router.js';
 
@@ -137,8 +157,29 @@ watch(matchLength, () => {
 	});
 });
 
+const inviteOnly = ref<boolean>(room.value.isInviteOnly);
+
+watch(inviteOnly, () => {
+	if (inviteOnly.value === room.value.isInviteOnly) return;
+	room.value.isInviteOnly = inviteOnly.value;
+	props.connection.send('updateSettings', {
+		key: 'isInviteOnly',
+		value: inviteOnly.value,
+	});
+});
+
 const roomUrl = computed(() => `${url}/mahjong/g/${room.value.id}`);
 const isOwner = computed(() => room.value.user1Id === $i.id);
+
+const isMember = computed(() => [
+	room.value.user1Id,
+	room.value.user2Id,
+	room.value.user3Id,
+	room.value.user4Id,
+].includes($i.id));
+
+/** 対局開始前で、ルームの参加者なら招待できる */
+const canInvite = computed(() => isMember.value && !room.value.isStarted && !room.value.isEnded);
 
 const isReady = computed(() => {
 	if (room.value.user1Id === $i.id && room.value.user1Ready) return true;
@@ -231,6 +272,73 @@ async function kick(index: number) {
 	props.connection.send('kick', { index });
 }
 
+type Invitation = Misskey.entities.MahjongRoomDetailed['invitations'][number];
+
+/** 招待された人の表示名 (パック済みのユーザーが無い場合はIDで返す) */
+function invitationName(invitation: Invitation): string {
+	return invitation.user?.name ?? invitation.user?.username ?? invitation.userId;
+}
+
+// 招待のAPIが返すエラーコードとメッセージの対応
+const inviteErrorMessages: Record<string, string> = {
+	ALREADY_INVITED: i18n.ts._mahjong.alreadyInvited,
+	CANNOT_INVITE: i18n.ts._mahjong.cannotInvite,
+	NOT_LOCAL_USER: i18n.ts._mahjong.notLocalUser,
+	ROOM_FULL: i18n.ts._mahjong.roomFull,
+	GAME_STARTED: i18n.ts._mahjong.gameStarted,
+	NOT_MEMBER: i18n.ts._mahjong.notMember,
+	NO_SUCH_ROOM: i18n.ts._mahjong.noSuchRoom,
+	NO_SUCH_USER: i18n.ts.noSuchUser,
+	NO_SUCH_INVITATION: i18n.ts._mahjong.noSuchInvitation,
+};
+
+async function showApiError(err: unknown): Promise<void> {
+	const apiError = err as { code?: string; message?: string };
+	await os.alert({
+		type: 'error',
+		text: (apiError.code != null ? inviteErrorMessages[apiError.code] : null) ?? i18n.ts._mahjong.inviteFailed,
+	});
+}
+
+function canCancelInvitation(invitation: Invitation): boolean {
+	if (!canInvite.value) return false;
+	return invitation.inviterId === $i.id || isOwner.value;
+}
+
+async function invite() {
+	const user = await os.selectUser({ includeSelf: false, localOnly: true });
+
+	try {
+		room.value = await misskeyApi('mahjong/invite', {
+			roomId: room.value.id,
+			userId: user.id,
+		});
+		inviteOnly.value = room.value.isInviteOnly;
+		os.success();
+	} catch (err) {
+		await showApiError(err);
+	}
+}
+
+async function cancelInvite(invitation: Invitation) {
+	const { canceled } = await os.confirm({
+		type: 'warning',
+		text: i18n.tsx._mahjong.cancelInviteConfirm({ name: invitationName(invitation) }),
+	});
+	if (canceled) return;
+
+	try {
+		room.value = await misskeyApi('mahjong/cancel-invite', {
+			roomId: room.value.id,
+			userId: invitation.userId,
+		});
+		inviteOnly.value = room.value.isInviteOnly;
+		os.success();
+	} catch (err) {
+		await showApiError(err);
+	}
+}
+
 function onChangeReadyStates(states: {
 	user1: boolean;
 	user2: boolean;
@@ -290,14 +398,41 @@ function onLeft(x: { index: number }) {
 	}
 }
 
+function onInvited(x: {
+	user: Misskey.entities.UserLite;
+	inviterId: string;
+}) {
+	if (room.value.invitations.some(invitation => invitation.userId === x.user.id)) return;
+	room.value.invitations = [...room.value.invitations, {
+		userId: x.user.id,
+		inviterId: x.inviterId,
+		user: x.user,
+	}];
+}
+
+function onInvitationCanceled(x: { userId: string }) {
+	room.value.invitations = room.value.invitations.filter(invitation => invitation.userId !== x.userId);
+}
+
+function onInviteOnlyChanged(x: { isInviteOnly: boolean }) {
+	room.value.isInviteOnly = x.isInviteOnly;
+	inviteOnly.value = x.isInviteOnly;
+}
+
 props.connection.on('changeReadyStates', onChangeReadyStates);
 props.connection.on('joined', onJoined);
 props.connection.on('left', onLeft);
+props.connection.on('invited', onInvited);
+props.connection.on('invitationCanceled', onInvitationCanceled);
+props.connection.on('inviteOnlyChanged', onInviteOnlyChanged);
 
 onUnmounted(() => {
 	props.connection.off('changeReadyStates', onChangeReadyStates);
 	props.connection.off('joined', onJoined);
 	props.connection.off('left', onLeft);
+	props.connection.off('invited', onInvited);
+	props.connection.off('invitationCanceled', onInvitationCanceled);
+	props.connection.off('inviteOnlyChanged', onInviteOnlyChanged);
 });
 </script>
 

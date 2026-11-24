@@ -265,6 +265,31 @@ export class NotificationService implements OnApplicationShutdown {
 		}
 	}
 
+	/**
+	 * 麻雀の招待の通知を、相手（通知の受け手）から削除する。
+	 * 招待の取り消し・参加成立・追放で呼ぶ。
+	 */
+	@bindThis
+	public async deleteMahjongInvitation(userId: MiUser['id'], roomId: string) {
+		const streamKey = `notificationTimeline:${userId}`;
+		const entries = await this.redisClient.xrange(streamKey, '-', '+');
+
+		for (const [entryId, fields] of entries) {
+			const dataIndex = fields.indexOf('data');
+			if (dataIndex === -1) continue;
+			try {
+				const data = JSON.parse(fields[dataIndex + 1]);
+
+				if (data.type === 'mahjongInvited' && data.roomId === roomId) {
+					await this.redisClient.xdel(streamKey, entryId);
+					this.globalEventService.publishMainStream(userId, 'notificationDeleted', data.id);
+				}
+			} catch (e) {
+				console.error('(MahjongInvitationNotification) JSON Parsing Error:', e);
+			}
+		}
+	}
+
 	@bindThis
 	public async deleteNotification(userId: MiUser['id'], notificationId: MiNotification['id']) : Promise<MiNotification['id'] | void> {
 		const id = await this.getRedisNotificationId(userId, notificationId);

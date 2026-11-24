@@ -34,6 +34,8 @@ function createRoom(): MahjongRoom {
 		user4Ready: true,
 		timeLimitForEachTurn: 30,
 		matchLength: 'south',
+		isInviteOnly: false,
+		invitations: [],
 	};
 }
 
@@ -201,6 +203,8 @@ function createCallingService(room: MahjongRoom) {
 		{} as unknown as ConstructorParameters<typeof MahjongService>[1],
 		{} as unknown as ConstructorParameters<typeof MahjongService>[2],
 		{} as unknown as ConstructorParameters<typeof MahjongService>[3],
+		{} as unknown as ConstructorParameters<typeof MahjongService>[4],
+		{} as unknown as ConstructorParameters<typeof MahjongService>[5],
 	);
 
 	return { service, store };
@@ -232,6 +236,8 @@ describe('MahjongService', () => {
 			{} as unknown as ConstructorParameters<typeof MahjongService>[1],
 			globalEventService as unknown as ConstructorParameters<typeof MahjongService>[2],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
 		);
 
 		try {
@@ -296,6 +302,8 @@ describe('MahjongService', () => {
 			{} as unknown as ConstructorParameters<typeof MahjongService>[1],
 			globalEventService as unknown as ConstructorParameters<typeof MahjongService>[2],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
 		);
 
 		try {
@@ -448,6 +456,8 @@ describe('MahjongService nextKyokuLocked abortive draw', () => {
 			{} as unknown as ConstructorParameters<typeof MahjongService>[1],
 			globalEventService as unknown as ConstructorParameters<typeof MahjongService>[2],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
 		);
 
 		const createInitialState = vi.spyOn(Mmj.MasterGameEngine, 'createInitialState').mockReturnValue(kyushuState);
@@ -485,6 +495,8 @@ describe('MahjongService nextKyokuLocked single match', () => {
 			{} as unknown as ConstructorParameters<typeof MahjongService>[1],
 			globalEventService as unknown as ConstructorParameters<typeof MahjongService>[2],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
 		);
 		return { service, published, store };
 	}
@@ -695,6 +707,8 @@ describe('MahjongService getActiveRooms', () => {
 			{} as unknown as ConstructorParameters<typeof MahjongService>[1],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[2],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
 		);
 		const saveRoom = (room: MahjongRoom) => (service as unknown as { saveRoom: (room: MahjongRoom) => Promise<void> }).saveRoom(room);
 		const deleteRoom = (roomId: string) => (service as unknown as { deleteRoom: (roomId: string) => Promise<void> }).deleteRoom(roomId);
@@ -857,6 +871,8 @@ describe('MahjongService kickUser', () => {
 			userEntityService as unknown as ConstructorParameters<typeof MahjongService>[1],
 			globalEventService as unknown as ConstructorParameters<typeof MahjongService>[2],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
 		);
 
 		return { service, store, published };
@@ -945,6 +961,301 @@ describe('MahjongService kickUser', () => {
 
 			const rejoined = await service.joinRoom('test-room', user3);
 			expect(rejoined!.user3Id).toBe('user3');
+		} finally {
+			service.dispose();
+		}
+	});
+});
+
+describe('MahjongService invitations', () => {
+	function createInvitationService(room: MahjongRoom, options: { blocking?: Set<string>; blocked?: Set<string> } = {}) {
+		const store = new Map<string, string>();
+		store.set(`mahjong:room:${room.id}`, JSON.stringify(room));
+		const { redisClient } = createRedisMock(store);
+
+		const published: Array<{ type: string; payload: unknown }> = [];
+		const globalEventService = {
+			publishMahjongRoomStream: (_roomId: string, type: string, payload: unknown) => {
+				published.push({ type, payload });
+			},
+		};
+		const userEntityService = {
+			pack: (user: MiUser) => Promise.resolve({ id: user.id, username: user.id }),
+			isLocalUser: () => true,
+		};
+		const created: Array<{ userId: string; type: string; data: Record<string, unknown>; notifierId?: string }> = [];
+		const deleted: Array<{ userId: string; roomId: string }> = [];
+		const notificationService = {
+			createNotification: (userId: string, type: string, data: Record<string, unknown>, notifierId?: string) => {
+				created.push({ userId, type, data, notifierId });
+			},
+			deleteMahjongInvitation: (userId: string, roomId: string) => {
+				deleted.push({ userId, roomId });
+				return Promise.resolve();
+			},
+		};
+		const cacheService = {
+			userBlockingCache: { fetch: () => Promise.resolve(options.blocking ?? new Set<string>()) },
+			userBlockedCache: { fetch: () => Promise.resolve(options.blocked ?? new Set<string>()) },
+		};
+
+		const service = new MahjongService(
+			redisClient as unknown as ConstructorParameters<typeof MahjongService>[0],
+			userEntityService as unknown as ConstructorParameters<typeof MahjongService>[1],
+			globalEventService as unknown as ConstructorParameters<typeof MahjongService>[2],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
+			notificationService as unknown as ConstructorParameters<typeof MahjongService>[4],
+			cacheService as unknown as ConstructorParameters<typeof MahjongService>[5],
+		);
+
+		return { service, store, published, created, deleted };
+	}
+
+	// 部屋主(user1)と参加者(user2)が決まっていて、3・4番席が空いている対局前のルーム
+	function createOpenLobbyRoom(): MahjongRoom {
+		return {
+			...createRoom(),
+			startedAt: null,
+			isStarted: false,
+			isEnded: false,
+			user3Id: null,
+			user3: null,
+			user3Ready: false,
+			user4Id: null,
+			user4: null,
+			user4Ready: false,
+		};
+	}
+
+	const owner = { id: 'user1' } as unknown as MiUser;
+	const player2 = { id: 'user2' } as unknown as MiUser;
+	const player3 = { id: 'user3' } as unknown as MiUser;
+	const guest = { id: 'user5' } as unknown as MiUser;
+
+	test('invites a local user, records the invitation and notifies the invitee', async () => {
+		const room = createOpenLobbyRoom();
+		room.isInviteOnly = true;
+		const { service, store, published, created } = createInvitationService(room);
+		try {
+			const result = await service.inviteUser('test-room', owner, guest);
+
+			expect(result.ok).toBe(true);
+			expect(result.ok && result.room.invitations).toEqual([{ userId: 'user5', inviterId: 'user1', user: { id: 'user5', username: 'user5' } }]);
+			expect(JSON.parse(store.get('mahjong:room:test-room')!).invitations).toHaveLength(1);
+			expect(published).toEqual([{ type: 'invited', payload: { user: { id: 'user5', username: 'user5' }, inviterId: 'user1' } }]);
+			expect(created).toEqual([{ userId: 'user5', type: 'mahjongInvited', data: { roomId: 'test-room' }, notifierId: 'user1' }]);
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('lets an invited user join an invite-only room and consumes the invitation', async () => {
+		const room = createOpenLobbyRoom();
+		room.isInviteOnly = true;
+		const { service, published, deleted } = createInvitationService(room);
+		try {
+			expect((await service.inviteUser('test-room', player2, guest)).ok).toBe(true);
+
+			const joined = await service.joinRoom('test-room', guest);
+
+			expect(joined!.user3Id).toBe('user5');
+			expect(joined!.invitations).toEqual([]);
+			expect(deleted).toEqual([{ userId: 'user5', roomId: 'test-room' }]);
+			expect(published.map(call => call.type)).toEqual(['invited', 'joined', 'invitationCanceled']);
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('refuses to let a user without an invitation join an invite-only room', async () => {
+		const room = createOpenLobbyRoom();
+		room.isInviteOnly = true;
+		const { service } = createInvitationService(room);
+		try {
+			expect(await service.joinRoom('test-room', guest)).toBeNull();
+
+			const latest = await service.getRoom('test-room');
+			expect(latest!.user3Id).toBeNull();
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('lets any participant invite and refuses non-members, players and double invitations', async () => {
+		const room = createOpenLobbyRoom();
+		const { service } = createInvitationService(room);
+		try {
+			// 部屋主でなくても参加者は招待できる
+			expect((await service.inviteUser('test-room', player2, guest)).ok).toBe(true);
+			// 参加者ではない人は招待できない
+			expect(await service.inviteUser('test-room', guest, { id: 'user7' } as unknown as MiUser)).toEqual({ ok: false, reason: 'notMember' });
+			// 参加済みの人は招待できない
+			expect(await service.inviteUser('test-room', owner, player2)).toEqual({ ok: false, reason: 'cannotInvite' });
+			// 二重招待は断る
+			expect(await service.inviteUser('test-room', owner, guest)).toEqual({ ok: false, reason: 'alreadyInvited' });
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('refuses invitations for a full room, a block, a started game and a missing room', async () => {
+		const full = createOpenLobbyRoom();
+		full.user3Id = 'user3';
+		full.user4Id = 'user4';
+		const { service: fullService } = createInvitationService(full);
+		try {
+			expect(await fullService.inviteUser('test-room', owner, guest)).toEqual({ ok: false, reason: 'roomFull' });
+		} finally {
+			fullService.dispose();
+		}
+
+		const { service: blockingService } = createInvitationService(createOpenLobbyRoom(), { blocking: new Set(['user5']) });
+		try {
+			expect(await blockingService.inviteUser('test-room', owner, guest)).toEqual({ ok: false, reason: 'cannotInvite' });
+		} finally {
+			blockingService.dispose();
+		}
+
+		const { service: blockedService } = createInvitationService(createOpenLobbyRoom(), { blocked: new Set(['user5']) });
+		try {
+			expect(await blockedService.inviteUser('test-room', owner, guest)).toEqual({ ok: false, reason: 'cannotInvite' });
+		} finally {
+			blockedService.dispose();
+		}
+
+		const { service: startedService } = createInvitationService(createRoom());
+		try {
+			expect(await startedService.inviteUser('test-room', owner, guest)).toEqual({ ok: false, reason: 'gameStarted' });
+		} finally {
+			startedService.dispose();
+		}
+
+		const { service } = createInvitationService(createOpenLobbyRoom());
+		try {
+			expect(await service.inviteUser('missing-room', owner, guest)).toEqual({ ok: false, reason: 'noSuchRoom' });
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('cancels an invitation and deletes the notification', async () => {
+		const room = createOpenLobbyRoom();
+		room.isInviteOnly = true;
+		const { service, store, published, deleted } = createInvitationService(room);
+		try {
+			expect((await service.inviteUser('test-room', player2, guest)).ok).toBe(true);
+
+			// 参加者でないと取り消せない
+			expect(await service.cancelInvitation('test-room', { id: 'user9' } as unknown as MiUser, 'user5')).toEqual({ ok: false, reason: 'notMember' });
+			// 招待されていない人の分は取り消せない
+			expect(await service.cancelInvitation('test-room', player2, 'user3')).toEqual({ ok: false, reason: 'noSuchInvitation' });
+
+			// 部屋主は誰が送った招待でも取り消せる
+			const result = await service.cancelInvitation('test-room', owner, 'user5');
+			expect(result.ok).toBe(true);
+			expect(result.ok && result.room.invitations).toEqual([]);
+			expect(JSON.parse(store.get('mahjong:room:test-room')!).invitations).toEqual([]);
+			expect(deleted).toEqual([{ userId: 'user5', roomId: 'test-room' }]);
+			expect(published.map(call => call.type)).toEqual(['invited', 'invitationCanceled']);
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('a kicked player cannot rejoin an invite-only room', async () => {
+		const room = createOpenLobbyRoom();
+		room.isInviteOnly = true;
+		const { service, published, deleted } = createInvitationService(room);
+		try {
+			expect((await service.inviteUser('test-room', owner, player3)).ok).toBe(true);
+			expect((await service.joinRoom('test-room', player3))!.user3Id).toBe('user3');
+
+			const kicked = await service.kickUser('test-room', owner, 3);
+			expect(kicked!.user3Id).toBeNull();
+			// 参加時に招待は消費済みなので、追放で招待を削除することはない
+			expect(deleted).toEqual([{ userId: 'user3', roomId: 'test-room' }]);
+			expect(published.map(call => call.type)).toEqual(['invited', 'joined', 'invitationCanceled', 'kicked', 'left', 'changeReadyStates']);
+
+			// 招待制のルームから追放された人は、招待し直されるまで参加できない
+			expect(await service.joinRoom('test-room', player3)).toBeNull();
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('kicking a player with a pending invitation removes the invitation and the notification', async () => {
+		const room = createOpenLobbyRoom();
+		room.isInviteOnly = true;
+		// 参加者が決まった後に招待制へ切り替え、招待が残っている状態
+		room.user3Id = 'user3';
+		room.user3 = { id: 'user3', username: 'user3' } as unknown as MahjongRoom['user3'];
+		room.user3Ready = true;
+		room.invitations = [{ userId: 'user3', inviterId: 'user2', user: null }];
+		const { service, published, deleted } = createInvitationService(room);
+		try {
+			const kicked = await service.kickUser('test-room', owner, 3);
+
+			expect(kicked!.user3Id).toBeNull();
+			expect(kicked!.invitations).toEqual([]);
+			expect(deleted).toEqual([{ userId: 'user3', roomId: 'test-room' }]);
+			expect(published.map(call => call.type)).toEqual(['kicked', 'left', 'invitationCanceled', 'changeReadyStates']);
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('publishes inviteOnlyChanged when the owner toggles the setting', async () => {
+		const { service, store, published } = createInvitationService(createOpenLobbyRoom());
+		try {
+			// 部屋主以外は変更できない
+			await service.updateSettings('test-room', player2, 'isInviteOnly', true);
+			expect(JSON.parse(store.get('mahjong:room:test-room')!).isInviteOnly).toBe(false);
+
+			await service.updateSettings('test-room', owner, 'isInviteOnly', true);
+			expect(JSON.parse(store.get('mahjong:room:test-room')!).isInviteOnly).toBe(true);
+			expect(published).toEqual([{ type: 'inviteOnlyChanged', payload: { isInviteOnly: true } }]);
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('does not expose invitations in the lobby summary', async () => {
+		const room = createOpenLobbyRoom();
+		room.isStarted = true;
+		room.startedAt = new Date(0).toISOString();
+		room.isInviteOnly = true;
+		room.invitations = [{ userId: 'user5', inviterId: 'user1', user: null }];
+		const { service } = createInvitationService(room);
+		try {
+			const summary = await service.packRoomSummary(room);
+
+			expect(summary.isInviteOnly).toBe(true);
+			expect(summary.invitations).toEqual([]);
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('treats rooms created before the invitation feature as public rooms', async () => {
+		const legacy = { ...createOpenLobbyRoom(), isInviteOnly: undefined, invitations: undefined };
+		const store = new Map<string, string>();
+		store.set('mahjong:room:test-room', JSON.stringify(legacy));
+		const { redisClient } = createRedisMock(store);
+		const service = new MahjongService(
+			redisClient as unknown as ConstructorParameters<typeof MahjongService>[0],
+			{ pack: (user: MiUser) => Promise.resolve({ id: user.id, username: user.id }), isLocalUser: () => true } as unknown as ConstructorParameters<typeof MahjongService>[1],
+			{ publishMahjongRoomStream: () => { } } as unknown as ConstructorParameters<typeof MahjongService>[2],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
+		);
+		try {
+			const room = await service.getRoom('test-room');
+
+			expect(room!.isInviteOnly).toBe(false);
+			expect(room!.invitations).toEqual([]);
+			// 招待がなくても参加できる
+			expect((await service.joinRoom('test-room', guest))!.user3Id).toBe('user5');
 		} finally {
 			service.dispose();
 		}

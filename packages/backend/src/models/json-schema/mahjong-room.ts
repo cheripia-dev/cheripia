@@ -115,6 +115,35 @@ export const packedMahjongRoomDetailedSchema = {
 			optional: false, nullable: false,
 			enum: ['single', 'east', 'south'],
 		},
+		isInviteOnly: {
+			type: 'boolean',
+			optional: false, nullable: false,
+		},
+		invitations: {
+			type: 'array',
+			optional: false, nullable: false,
+			items: {
+				type: 'object',
+				optional: false, nullable: false,
+				properties: {
+					userId: {
+						type: 'string',
+						optional: false, nullable: false,
+						format: 'id',
+					},
+					inviterId: {
+						type: 'string',
+						optional: false, nullable: false,
+						format: 'id',
+					},
+					user: {
+						type: 'object',
+						optional: false, nullable: true,
+						ref: 'UserLite',
+					},
+				},
+			},
+		},
 		gameState: {
 			type: 'object',
 			optional: false, nullable: true,

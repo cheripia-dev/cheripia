@@ -519,7 +519,11 @@ import type {
 	InviteLimitResponse,
 	InviteListRequest,
 	InviteListResponse,
+	MahjongCancelInviteRequest,
+	MahjongCancelInviteResponse,
 	MahjongCreateRoomResponse,
+	MahjongInviteRequest,
+	MahjongInviteResponse,
 	MahjongJoinRoomRequest,
 	MahjongJoinRoomResponse,
 	MahjongRoomsResponse,
@@ -1095,7 +1099,9 @@ export type Endpoints = {
 	'invite/delete': { req: InviteDeleteRequest; res: EmptyResponse };
 	'invite/limit': { req: EmptyRequest; res: InviteLimitResponse };
 	'invite/list': { req: InviteListRequest; res: InviteListResponse };
+	'mahjong/cancel-invite': { req: MahjongCancelInviteRequest; res: MahjongCancelInviteResponse };
 	'mahjong/create-room': { req: EmptyRequest; res: MahjongCreateRoomResponse };
+	'mahjong/invite': { req: MahjongInviteRequest; res: MahjongInviteResponse };
 	'mahjong/join-room': { req: MahjongJoinRoomRequest; res: MahjongJoinRoomResponse };
 	'mahjong/rooms': { req: EmptyRequest; res: MahjongRoomsResponse };
 	'mahjong/show-room': { req: MahjongShowRoomRequest; res: MahjongShowRoomResponse };

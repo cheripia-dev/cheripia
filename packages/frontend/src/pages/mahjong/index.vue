@@ -113,6 +113,14 @@ async function joinRoom() {
 		router.pushByPath(`/mahjong/g/${room.id}`);
 	} catch (err) {
 		console.error(err);
+		const apiError = err as { code?: string };
+		if (apiError.code === 'NOT_INVITED') {
+			await os.alert({
+				type: 'warning',
+				text: i18n.ts._mahjong.notInvited,
+			});
+			return;
+		}
 		await os.alert({
 			type: 'warning',
 			text: 'ルームに参加できませんでした。',

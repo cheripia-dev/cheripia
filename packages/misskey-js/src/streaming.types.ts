@@ -356,6 +356,16 @@ export type Channels = {
 			canceled: (payload: {
 				userId: string;
 			}) => void;
+			invited: (payload: {
+				user: UserLite;
+				inviterId: string;
+			}) => void;
+			invitationCanceled: (payload: {
+				userId: string;
+			}) => void;
+			inviteOnlyChanged: (payload: {
+				isInviteOnly: boolean;
+			}) => void;
 			changeReadyStates: (payload: {
 				user1: boolean;
 				user2: boolean;
@@ -456,6 +466,9 @@ export type Channels = {
 			} | {
 				key: 'matchLength';
 				value: 'single' | 'east' | 'south';
+			} | {
+				key: 'isInviteOnly';
+				value: boolean;
 			};
 			removeAi: {
 				index: number;

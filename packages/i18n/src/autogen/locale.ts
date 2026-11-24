@@ -12955,6 +12955,10 @@ export interface Locale extends ILocale {
          */
         "chatRoomInvitationReceived": string;
         /**
+         * {name}から麻雀に招待されました
+         */
+        "mahjongInvited": ParameterizedString<"name">;
+        /**
          * プッシュ通知の更新をしました
          */
         "emptyPushNotificationMessage": string;
@@ -13088,6 +13092,10 @@ export interface Locale extends ILocale {
              * ダイレクトメッセージのグループへ招待された
              */
             "chatRoomInvitationReceived": string;
+            /**
+             * 麻雀に招待された
+             */
+            "mahjongInvited": string;
             /**
              * 実績の獲得
              */
@@ -16112,6 +16120,82 @@ export interface Locale extends ILocale {
          * ルームが解散されました
          */
         "roomCanceled": string;
+        /**
+         * このURLを同じインスタンスのユーザーに共有してください。
+         */
+        "shareUrlHint": string;
+        /**
+         * このルームは招待制です。招待されたユーザーのみ参加できます。
+         */
+        "inviteOnlyShareUrlHint": string;
+        /**
+         * 招待
+         */
+        "invite": string;
+        /**
+         * 招待制
+         */
+        "inviteOnly": string;
+        /**
+         * 招待したユーザーのみが参加できます
+         */
+        "inviteOnlyDescription": string;
+        /**
+         * 招待中のユーザー
+         */
+        "invitedUsers": string;
+        /**
+         * 招待を取り消す
+         */
+        "cancelInvite": string;
+        /**
+         * {name}さんへの招待を取り消しますか？
+         */
+        "cancelInviteConfirm": ParameterizedString<"name">;
+        /**
+         * ルームを見る
+         */
+        "showRoom": string;
+        /**
+         * このルームは招待制のため、参加するには招待が必要です。
+         */
+        "notInvited": string;
+        /**
+         * ルームが見つかりません。
+         */
+        "noSuchRoom": string;
+        /**
+         * そのユーザーは既に招待されています。
+         */
+        "alreadyInvited": string;
+        /**
+         * そのユーザーを招待できません。
+         */
+        "cannotInvite": string;
+        /**
+         * 招待できるのはこのインスタンスのユーザーです。
+         */
+        "notLocalUser": string;
+        /**
+         * ルームが満員です。
+         */
+        "roomFull": string;
+        /**
+         * 対局は既に始まっています。
+         */
+        "gameStarted": string;
+        /**
+         * あなたはルームの参加者ではありません。
+         */
+        "notMember": string;
+        /**
+         * 取り消せる招待がありません。
+         */
+        "noSuchInvitation": string;
+        /**
+         * 招待に失敗しました。
+         */
+        "inviteFailed": string;
         /**
          * 東
          */

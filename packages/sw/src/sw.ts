@@ -217,6 +217,9 @@ globalThis.addEventListener('notificationclick', (ev: ServiceWorkerGlobalScopeEv
 							case 'chatRoomInvitationReceived':
 								client = await swos.openClient('push', '/chat', loginId);
 								break;
+							case 'mahjongInvited':
+								client = await swos.openClient('push', `/mahjong/g/${data.body.roomId}`, loginId);
+								break;
 							default:
 								if ('note' in data.body) {
 									client = await swos.openNote(data.body.note.id, loginId);

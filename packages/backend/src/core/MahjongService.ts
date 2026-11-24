@@ -11,6 +11,8 @@ import { DI } from '@/di-symbols.js';
 import { bindThis } from '@/decorators.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { GlobalEventService } from '@/core/GlobalEventService.js';
+import { NotificationService } from '@/core/NotificationService.js';
+import { CacheService } from '@/core/CacheService.js';
 import { buildRonnedHandTiles } from '@/misc/mahjong-stream-mask.js';
 import { IdService } from '@/core/IdService.js';
 import { Packed } from '@/misc/json-schema.js';
@@ -46,9 +48,44 @@ export type MahjongRoom = {
 	 * 対局開始前のルーム設定でのみ変更できる。
 	 */
 	matchLength: Mmj.MatchLength;
+	/**
+	 * 招待制のルームでは、参加者と招待されたユーザーだけが参加できる。
+	 * 対局開始前のルーム設定でのみ変更できる。
+	 */
+	isInviteOnly: boolean;
+	/** 対局開始前に参加者が送った招待。参加成立・追放・取り消しで取り除かれる。 */
+	invitations: MahjongInvitation[];
 
 	gameState?: Mmj.MasterState;
 };
+
+/** ルーム参加者がローカルユーザーへ送った招待 */
+export type MahjongInvitation = {
+	userId: string;
+	inviterId: string;
+	user: Packed<'UserLite'> | null;
+};
+
+/** 招待・招待取り消しが失敗した理由 */
+export type MahjongInviteFailure =
+	/** ルームが存在しない */
+	| 'noSuchRoom'
+	/** 操作した人がルームの参加者ではない */
+	| 'notMember'
+	/** 対局が始まっている、またはルームが終わっている */
+	| 'gameStarted'
+	/** 人間ユーザーが入れる席が残っていない */
+	| 'roomFull'
+	/** 麻雀はローカルユーザーしか参加できない */
+	| 'notLocalUser'
+	/** 招待相手が自分・参加済み、またはブロックし合っている */
+	| 'cannotInvite'
+	/** 既に招待を送っている */
+	| 'alreadyInvited'
+	/** 取り消す招待が見当たらなかった、または取り消す権限がない */
+	| 'noSuchInvitation';
+
+export type MahjongInviteResult = { ok: true; room: MahjongRoom } | { ok: false; reason: MahjongInviteFailure };
 
 type CallingAnswers = {
 	pon: Record<Mmj.House, boolean | null>;
@@ -133,6 +170,13 @@ function parseRoom(raw: string): MahjongRoom {
 	// matchLength 導入前の既存ルーム・未知の値は東南戦 ('south') 扱いとする。
 	if (!Mmj.isMatchLength(parsed.matchLength)) {
 		parsed.matchLength = 'south';
+	}
+	// 招待制導入前の既存ルームは招待不要の公開ルーム扱いとする。
+	if (typeof parsed.isInviteOnly !== 'boolean') {
+		parsed.isInviteOnly = false;
+	}
+	if (!Array.isArray(parsed.invitations)) {
+		parsed.invitations = [];
 	}
 	return parsed;
 }
@@ -306,6 +350,8 @@ export class MahjongService implements OnApplicationShutdown {
 		private userEntityService: UserEntityService,
 		private globalEventService: GlobalEventService,
 		private idService: IdService,
+		private notificationService: NotificationService,
+		private cacheService: CacheService,
 	) {
 	}
 
@@ -413,6 +459,8 @@ export class MahjongService implements OnApplicationShutdown {
 			user4Ready: false,
 			timeLimitForEachTurn: 30,
 			matchLength: 'south',
+			isInviteOnly: false,
+			invitations: [],
 		};
 		await this.saveRoom(room);
 		return room;
@@ -475,6 +523,86 @@ export class MahjongService implements OnApplicationShutdown {
 		return mj.getHouse(slot);
 	}
 
+	/** 人間ユーザーが入れる席 (2〜4番席) が残っているか */
+	private hasOpenSeat(room: MahjongRoom): boolean {
+		return room.user2Id == null || room.user3Id == null || room.user4Id == null;
+	}
+
+	@bindThis
+	public isInvited(room: MahjongRoom, userId: MiUser['id']): boolean {
+		return room.invitations.some(invitation => invitation.userId === userId);
+	}
+
+	/**
+	 * ルーム参加者がローカルユーザーを麻雀に招待する。
+	 * 対局開始前で、空席があり、相手が参加者・招待済みでない場合のみ成功する。
+	 */
+	@bindThis
+	public async inviteUser(roomId: MahjongRoom['id'], inviter: MiUser, invitee: MiUser): Promise<MahjongInviteResult> {
+		return await this.withRoomLock(roomId, () => this.inviteUserLocked(roomId, inviter, invitee));
+	}
+
+	private async inviteUserLocked(roomId: MahjongRoom['id'], inviter: MiUser, invitee: MiUser): Promise<MahjongInviteResult> {
+		const room = await this.getRoom(roomId);
+		if (room == null) return { ok: false, reason: 'noSuchRoom' };
+		if (!this.isMember(room, inviter)) return { ok: false, reason: 'notMember' };
+		if (room.isStarted || room.isEnded) return { ok: false, reason: 'gameStarted' };
+		if (!this.hasOpenSeat(room)) return { ok: false, reason: 'roomFull' };
+		// 麻雀はローカルユーザーしか参加できない
+		if (!this.userEntityService.isLocalUser(invitee)) return { ok: false, reason: 'notLocalUser' };
+		if (inviter.id === invitee.id || this.isMember(room, invitee)) return { ok: false, reason: 'cannotInvite' };
+		if (this.isInvited(room, invitee.id)) return { ok: false, reason: 'alreadyInvited' };
+
+		const [blocking, blocked] = await Promise.all([
+			this.cacheService.userBlockingCache.fetch(inviter.id),
+			this.cacheService.userBlockedCache.fetch(inviter.id),
+		]);
+		if (blocking.has(invitee.id) || blocked.has(invitee.id)) return { ok: false, reason: 'cannotInvite' };
+
+		const packed = await this.userEntityService.pack(invitee);
+		room.invitations = [...room.invitations, {
+			userId: invitee.id,
+			inviterId: inviter.id,
+			user: packed,
+		}];
+		await this.saveRoom(room);
+
+		this.globalEventService.publishMahjongRoomStream(room.id, 'invited', { user: packed, inviterId: inviter.id });
+		this.notificationService.createNotification(invitee.id, 'mahjongInvited', { roomId: room.id }, inviter.id);
+
+		return { ok: true, room };
+	}
+
+	/**
+	 * 招待を取り消す。招待した本人と部屋主が取り消せる。
+	 * 取り消した招待の通知は相手から削除される。
+	 */
+	@bindThis
+	public async cancelInvitation(roomId: MahjongRoom['id'], user: MiUser, targetUserId: MiUser['id']): Promise<MahjongInviteResult> {
+		return await this.withRoomLock(roomId, () => this.cancelInvitationLocked(roomId, user, targetUserId));
+	}
+
+	private async cancelInvitationLocked(roomId: MahjongRoom['id'], user: MiUser, targetUserId: MiUser['id']): Promise<MahjongInviteResult> {
+		const room = await this.getRoom(roomId);
+		if (room == null) return { ok: false, reason: 'noSuchRoom' };
+		if (!this.isMember(room, user)) return { ok: false, reason: 'notMember' };
+		if (room.isStarted || room.isEnded) return { ok: false, reason: 'gameStarted' };
+
+		const invitation = room.invitations.find(x => x.userId === targetUserId);
+		// 部屋主は誰でも、参加者は自分が出した招待を取り消せる
+		if (invitation == null || (invitation.inviterId !== user.id && room.user1Id !== user.id)) {
+			return { ok: false, reason: 'noSuchInvitation' };
+		}
+
+		room.invitations = room.invitations.filter(x => x.userId !== targetUserId);
+		await this.saveRoom(room);
+
+		this.globalEventService.publishMahjongRoomStream(room.id, 'invitationCanceled', { userId: targetUserId });
+		await this.notificationService.deleteMahjongInvitation(targetUserId, room.id);
+
+		return { ok: true, room };
+	}
+
 	@bindThis
 	public async joinRoom(roomId: MahjongRoom['id'], user: MiUser): Promise<MahjongRoom | null> {
 		return await this.withRoomLock(roomId, () => this.joinRoomLocked(roomId, user));
@@ -485,6 +613,10 @@ export class MahjongService implements OnApplicationShutdown {
 		if (room == null) return null;
 		if (this.isMember(room, user)) return room;
 		if (room.isStarted) return null;
+		// 招待制のルームで招待がない場合の拒否はAPI側でも行っているが、
+		// 競合で招待が取り消された直後でも参加を通さないようここではnullで返す
+		const invited = this.isInvited(room, user.id);
+		if (room.isInviteOnly && !invited) return null;
 
 		const packed = await this.userEntityService.pack(user);
 
@@ -498,8 +630,16 @@ export class MahjongService implements OnApplicationShutdown {
 			room[userKey] = packed;
 			room[aiKey] = false;
 			room[readyKey] = false;
+			if (invited) {
+				// 参加が決まった招待は取り除き、招待の通知も相手から消す
+				room.invitations = room.invitations.filter(x => x.userId !== user.id);
+				await this.notificationService.deleteMahjongInvitation(user.id, room.id);
+			}
 			await this.saveRoom(room);
 			this.globalEventService.publishMahjongRoomStream(room.id, 'joined', { index, user: packed });
+			if (invited) {
+				this.globalEventService.publishMahjongRoomStream(room.id, 'invitationCanceled', { userId: user.id });
+			}
 			return true;
 		};
 
@@ -571,7 +711,8 @@ export class MahjongService implements OnApplicationShutdown {
 	/**
 	 * 部屋主がプレイヤーを席から追放する (Kick)。
 	 * 対局開始前のみ有効で、対象は2〜4番席の人間ユーザー。
-	 * 追放されたプレイヤーは、再度ルームに参加できる。
+	 * 追放されたプレイヤーは、再度ルームに参加できる。招待制のルームでは招待も取り除かれるため、
+	 * 改めて招待し直さない限り参加できない。
 	 */
 	@bindThis
 	public async kickUser(roomId: MahjongRoom['id'], user: MiUser, index: 2 | 3 | 4): Promise<MahjongRoom | null> {
@@ -596,10 +737,19 @@ export class MahjongService implements OnApplicationShutdown {
 		room[userKey] = null;
 		room[aiKey] = false;
 		room[readyKey] = false;
+		// 招待制のルームへ追放した人が再び参加できないよう、招待も取り除く
+		const wasInvited = this.isInvited(room, targetUserId);
+		if (wasInvited) {
+			room.invitations = room.invitations.filter(invitation => invitation.userId !== targetUserId);
+			await this.notificationService.deleteMahjongInvitation(targetUserId, room.id);
+		}
 		await this.saveRoom(room);
 
 		this.globalEventService.publishMahjongRoomStream(room.id, 'kicked', { index, userId: targetUserId });
 		this.globalEventService.publishMahjongRoomStream(room.id, 'left', { index });
+		if (wasInvited) {
+			this.globalEventService.publishMahjongRoomStream(room.id, 'invitationCanceled', { userId: targetUserId });
+		}
 		this.globalEventService.publishMahjongRoomStream(room.id, 'changeReadyStates', {
 			user1: room.user1Ready,
 			user2: room.user2Ready,
@@ -668,6 +818,13 @@ export class MahjongService implements OnApplicationShutdown {
 			if (!Mmj.isMatchLength(value)) return;
 			room.matchLength = value;
 			await this.saveRoom(room);
+		}
+
+		if (key === 'isInviteOnly') {
+			if (typeof value !== 'boolean') return;
+			room.isInviteOnly = value;
+			await this.saveRoom(room);
+			this.globalEventService.publishMahjongRoomStream(room.id, 'inviteOnlyChanged', { isInviteOnly: value });
 		}
 	}
 
@@ -1701,6 +1858,8 @@ export class MahjongService implements OnApplicationShutdown {
 	public async packRoomSummary(room: MahjongRoom): Promise<Packed<'MahjongRoomDetailed'>> {
 		return {
 			...room,
+			// ロビー一覧には招待の一覧は不要な上、公開するものではない
+			invitations: [],
 			gameState: null,
 		} as Packed<'MahjongRoomDetailed'>;
 	}
@@ -1709,6 +1868,8 @@ export class MahjongService implements OnApplicationShutdown {
 	public async packSpectatorRoom(room: MahjongRoom): Promise<Packed<'MahjongRoomDetailed'>> {
 		return {
 			...room,
+			// 観戦者には招待の一覧を見せない
+			invitations: [],
 			gameState: room.gameState != null ? new Mmj.MasterGameEngine(room.gameState).createSpectatorState() : null,
 		} as Packed<'MahjongRoomDetailed'>;
 	}

@@ -51,6 +51,15 @@ async function fetchGame() {
 		room.value = _room;
 	} catch (err) {
 		console.error(err);
+		const apiError = err as { code?: string };
+		if (apiError.code === 'NOT_INVITED') {
+			await os.alert({
+				type: 'warning',
+				text: i18n.ts._mahjong.notInvited,
+			});
+			router.pushByPath('/mahjong');
+			return;
+		}
 		await os.alert({
 			type: 'warning',
 			text: 'ルームに参加できませんでした。対局が開始されているか、ルームが存在しない可能性があります。',

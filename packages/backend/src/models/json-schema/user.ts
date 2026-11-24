@@ -686,6 +686,7 @@ export const packedMeDetailedOnlySchema = {
 				groupInvited: { optional: true, ...notificationRecieveConfig },
 				roleAssigned: { optional: true, ...notificationRecieveConfig },
 				chatRoomInvitationReceived: { optional: true, ...notificationRecieveConfig },
+				mahjongInvited: { optional: true, ...notificationRecieveConfig },
 				achievementEarned: { optional: true, ...notificationRecieveConfig },
 				app: { optional: true, ...notificationRecieveConfig },
 				test: { optional: true, ...notificationRecieveConfig },

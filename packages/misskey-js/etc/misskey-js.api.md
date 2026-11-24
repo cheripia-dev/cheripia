@@ -1089,6 +1089,16 @@ export type Channels = {
             canceled: (payload: {
                 userId: string;
             }) => void;
+            invited: (payload: {
+                user: UserLite;
+                inviterId: string;
+            }) => void;
+            invitationCanceled: (payload: {
+                userId: string;
+            }) => void;
+            inviteOnlyChanged: (payload: {
+                isInviteOnly: boolean;
+            }) => void;
             changeReadyStates: (payload: {
                 user1: boolean;
                 user2: boolean;
@@ -1189,6 +1199,9 @@ export type Channels = {
             } | {
                 key: 'matchLength';
                 value: 'single' | 'east' | 'south';
+            } | {
+                key: 'isInviteOnly';
+                value: boolean;
             };
             removeAi: {
                 index: number;
@@ -2346,7 +2359,11 @@ declare namespace entities {
         InviteLimitResponse,
         InviteListRequest,
         InviteListResponse,
+        MahjongCancelInviteRequest,
+        MahjongCancelInviteResponse,
         MahjongCreateRoomResponse,
+        MahjongInviteRequest,
+        MahjongInviteResponse,
         MahjongJoinRoomRequest,
         MahjongJoinRoomResponse,
         MahjongRoomsResponse,
@@ -3259,7 +3276,19 @@ type IWebhooksTestRequest = operations['i___webhooks___test']['requestBody']['co
 type IWebhooksUpdateRequest = operations['i___webhooks___update']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
+type MahjongCancelInviteRequest = operations['mahjong___cancel-invite']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type MahjongCancelInviteResponse = operations['mahjong___cancel-invite']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type MahjongCreateRoomResponse = operations['mahjong___create-room']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type MahjongInviteRequest = operations['mahjong___invite']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type MahjongInviteResponse = operations['mahjong___invite']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type MahjongJoinRoomRequest = operations['mahjong___join-room']['requestBody']['content']['application/json'];
@@ -3608,7 +3637,7 @@ type NotificationsCreateRequest = operations['notifications___create']['requestB
 type NotificationsDeleteRequest = operations['notifications___delete']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
-export const notificationTypes: readonly ["note", "follow", "mention", "reply", "renote", "quote", "reaction", "pollEnded", "scheduledNotePosted", "scheduledNotePostFailed", "receiveFollowRequest", "followRequestAccepted", "groupInvited", "app", "roleAssigned", "chatRoomInvitationReceived", "achievementEarned", "exportCompleted", "test", "login", "createToken"];
+export const notificationTypes: readonly ["note", "follow", "mention", "reply", "renote", "quote", "reaction", "pollEnded", "scheduledNotePosted", "scheduledNotePostFailed", "receiveFollowRequest", "followRequestAccepted", "groupInvited", "app", "roleAssigned", "chatRoomInvitationReceived", "mahjongInvited", "achievementEarned", "exportCompleted", "test", "login", "createToken"];
 
 // @public (undocumented)
 export function nyaize(text: string): string;
@@ -4321,7 +4350,7 @@ type VerifyEmailRequest = operations['verify-email']['requestBody']['content']['
 // src/streaming.ts:57:3 - (ae-forgotten-export) The symbol "ReconnectingWebSocket" needs to be exported by the entry point index.d.ts
 // src/streaming.types.ts:271:4 - (ae-forgotten-export) The symbol "ReversiUpdateKey" needs to be exported by the entry point index.d.ts
 // src/streaming.types.ts:287:4 - (ae-forgotten-export) The symbol "ReversiUpdateSettings" needs to be exported by the entry point index.d.ts
-// src/streaming.types.ts:378:5 - (ae-forgotten-export) The symbol "MahjongHouse" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:388:5 - (ae-forgotten-export) The symbol "MahjongHouse" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

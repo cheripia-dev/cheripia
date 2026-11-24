@@ -125,6 +125,9 @@ export class MahjongRoomChannel extends Channel {
 				} else if (body.key === 'matchLength') {
 					if (!isMatchLength(body.value)) return;
 					this.updateSettings(body.key, body.value);
+				} else if (body.key === 'isInviteOnly') {
+					if (typeof body.value !== 'boolean') return;
+					this.updateSettings(body.key, body.value);
 				}
 				break;
 			case 'removeAi':

@@ -257,6 +257,16 @@ export interface MahjongRoomEventTypes {
 	canceled: {
 		userId: MiUser['id'];
 	};
+	invited: {
+		user: Packed<'UserLite'>;
+		inviterId: MiUser['id'];
+	};
+	invitationCanceled: {
+		userId: MiUser['id'];
+	};
+	inviteOnlyChanged: {
+		isInviteOnly: boolean;
+	};
 	changeReadyStates: {
 		user1: boolean;
 		user2: boolean;
