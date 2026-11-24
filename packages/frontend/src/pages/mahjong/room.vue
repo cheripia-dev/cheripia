@@ -80,6 +80,14 @@ function isMember(_room: Misskey.entities.MahjongRoomDetailed): boolean {
 }
 
 /**
+ * 対局画面の URL を観戦画面の URL へ置き換える。
+ * 対局の開始前・終了後・ルーム消失は観戦側の処理が警告してロビーへ戻す。
+ */
+function redirectToSpectate(): void {
+	router.replaceByPath(`/mahjong/g/${props.roomId}/spectate`);
+}
+
+/**
  * 観戦としてルームを取得する。
  * 対局者本人が観戦 URL を開いた場合は通常の対局画面へ移す。
  */
@@ -144,6 +152,12 @@ async function fetchGame() {
 		return;
 	}
 
+	// 未ログインは対局に参加できないので、固定で観戦へ流す
+	if ($i == null) {
+		redirectToSpectate();
+		return;
+	}
+
 	try {
 		const _room = await misskeyApi('mahjong/join-room', {
 			roomId: props.roomId,
@@ -159,6 +173,11 @@ async function fetchGame() {
 				text: i18n.ts._mahjong.notInvited,
 			});
 			router.pushByPath('/mahjong');
+			return;
+		}
+		// 対局が開始されている場合は観戦へ流す (終了済みは観戦側が警告してロビーへ戻す)
+		if (apiError.code === 'GAME_STARTED') {
+			redirectToSpectate();
 			return;
 		}
 		await os.alert({

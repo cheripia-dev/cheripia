@@ -660,7 +660,7 @@ export const ROUTE_DEF = [{
 }, {
 	path: '/mahjong/g/:roomId',
 	component: page(() => import('@/pages/mahjong/room.vue')),
-	loginRequired: true,
+	loginRequired: false,
 }, {
 	path: '/qr',
 	component: page(() => import('@/pages/qr.vue')),
