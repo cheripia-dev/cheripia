@@ -1676,6 +1676,14 @@ export class MasterGameEngine {
 		state.drawnTile = this.$state.drawnTile ?? null;
 		state.handTiles = structuredClone(this.$state.handTiles);
 		state.huros = structuredClone(this.$state.huros);
+		// canPon / canCii / canKan / canRon は user1 視点の計算なので観戦状態では使わない。
+		// 視点は観戦者がクライアント側で選ぶため、要求そのものは askings で渡す
+		// (projectSpectatorState が視点ごとに再計算する)。
+		state.canPon = null;
+		state.canCii = null;
+		state.canKan = null;
+		state.canRon = null;
+		state.askings = structuredClone(this.$state.askings);
 		return state;
 	}
 

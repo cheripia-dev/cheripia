@@ -61,11 +61,18 @@ export class MahjongRoomChannel extends Channel {
 	@bindThis
 	private async onMahjongRoomStreamMessage(message: GlobalEvents['mahjongRoom']['payload']) {
 		if (this.spectator) {
-			const room = await this.mahjongService.getRoom(this.roomId!);
-			if (room == null) return;
-			this.send('spectatorState', {
-				room: await this.mahjongService.packSpectatorRoom(room),
-			});
+			// 観戦者にはイベントをマスキングなしで逐次配信する。
+			// 秘密牌の伏せ方は視点を選ぶクライアント側 (projectSpectatorState と
+			// PlayerGameEngine の他家分カバリング) で処理するため、サーバー側で
+			// プレイヤー分のマスクをする必要がない。
+			// ルーム一式が必要なイベント (対局開始・次局・終了) だけ観戦用に詰め替える。
+			if (message.type === 'started' || message.type === 'nextKyoku' || message.type === 'ended') {
+				this.send(message.type, {
+					room: await this.mahjongService.packSpectatorRoom(message.body.room),
+				});
+			} else {
+				this.send(message.type, message.body as unknown as JsonValue);
+			}
 			return;
 		}
 

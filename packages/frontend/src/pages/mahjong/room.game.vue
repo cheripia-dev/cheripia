@@ -29,7 +29,25 @@ SPDX-License-Identifier: AGPL-3.0-only
 			<div :class="$style.roundInfo">{{ roundLabel }}</div>
 			<div v-if="timerVisible" :class="$style.turnTimer" data-testid="mahjong-turn-timer">{{ timerLabel }}</div>
 		</div>
-		<div v-if="!room.isEnded && props.connection != null && isPlayer" :class="$style.autoModeToggle">
+		<div v-if="spectate" :class="$style.spectateControls">
+			<span :class="$style.spectateBadge" data-testid="mahjong-spectating-badge">{{ i18n.ts._mahjong.spectating }}</span>
+			<template v-if="!room.isEnded">
+				<button
+					v-for="n in viewNumbers"
+					:key="n"
+					type="button"
+					class="_button"
+					:class="[$style.spectateViewButton, { [$style.spectateViewButtonActive]: n === viewUserNumber }]"
+					:data-testid="`mahjong-spectate-view-${n}`"
+					:aria-pressed="n === viewUserNumber"
+					:aria-label="i18n.tsx._mahjong.spectateViewAs({ name: userNameForNumber(n) })"
+					@click="switchView(n)"
+				>
+					{{ userNameForNumber(n) }}
+				</button>
+			</template>
+		</div>
+		<div v-if="!room.isEnded && props.connection != null && isPlayer && !spectate" :class="$style.autoModeToggle">
 			<MkButton
 				v-for="mode in autoModes"
 				:key="mode"
@@ -178,7 +196,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 		</div>
 
 		<div :class="$style.playersContainer">
-			<div :class="[$style.playerOfToimen, $style.player]">
+			<div
+				:class="[$style.playerOfToimen, $style.player, { [$style.playerClickable]: spectate }]"
+				data-testid="mahjong-player-of-toimen"
+				:role="spectate ? 'button' : undefined"
+				:tabindex="spectate ? 0 : undefined"
+				:aria-label="spectate ? i18n.tsx._mahjong.spectateViewAs({ name: users[Mmj.prevHouse(Mmj.prevHouse(mj.myHouse))]?.name ?? users[Mmj.prevHouse(Mmj.prevHouse(mj.myHouse))]?.username ?? i18n.ts._mahjong.cpu }) : undefined"
+				@click="onPlayerTagClick(Mmj.prevHouse(Mmj.prevHouse(mj.myHouse)))"
+				@keydown.enter.prevent="onPlayerTagClick(Mmj.prevHouse(Mmj.prevHouse(mj.myHouse)))"
+				@keydown.space.prevent="onPlayerTagClick(Mmj.prevHouse(Mmj.prevHouse(mj.myHouse)))"
+			>
 				<span :class="$style.playerHouse">{{ houseLabel(Mmj.prevHouse(Mmj.prevHouse(mj.myHouse))) }}</span>
 				<template v-if="users[Mmj.prevHouse(Mmj.prevHouse(mj.myHouse))] != null">
 					<MkAvatar :user="users[Mmj.prevHouse(Mmj.prevHouse(mj.myHouse))]!" style="width: 30px; height: 30px;"/>
@@ -189,7 +216,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</template>
 				<span v-if="mj.riichis[Mmj.prevHouse(Mmj.prevHouse(mj.myHouse))]" :class="$style.riichi">{{ i18n.ts._mahjong.riichi }}</span>
 			</div>
-			<div :class="[$style.playerOfKamitya, $style.player]">
+			<div
+				:class="[$style.playerOfKamitya, $style.player, { [$style.playerClickable]: spectate }]"
+				data-testid="mahjong-player-of-kamitya"
+				:role="spectate ? 'button' : undefined"
+				:tabindex="spectate ? 0 : undefined"
+				:aria-label="spectate ? i18n.tsx._mahjong.spectateViewAs({ name: users[Mmj.prevHouse(mj.myHouse)]?.name ?? users[Mmj.prevHouse(mj.myHouse)]?.username ?? i18n.ts._mahjong.cpu }) : undefined"
+				@click="onPlayerTagClick(Mmj.prevHouse(mj.myHouse))"
+				@keydown.enter.prevent="onPlayerTagClick(Mmj.prevHouse(mj.myHouse))"
+				@keydown.space.prevent="onPlayerTagClick(Mmj.prevHouse(mj.myHouse))"
+			>
 				<span :class="$style.playerHouse">{{ houseLabel(Mmj.prevHouse(mj.myHouse)) }}</span>
 				<template v-if="users[Mmj.prevHouse(mj.myHouse)] != null">
 					<MkAvatar :user="users[Mmj.prevHouse(mj.myHouse)]!" style="width: 30px; height: 30px;"/>
@@ -200,7 +236,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</template>
 				<span v-if="mj.riichis[Mmj.prevHouse(mj.myHouse)]" :class="$style.riichi">{{ i18n.ts._mahjong.riichi }}</span>
 			</div>
-			<div :class="[$style.playerOfSimotya, $style.player]">
+			<div
+				:class="[$style.playerOfSimotya, $style.player, { [$style.playerClickable]: spectate }]"
+				data-testid="mahjong-player-of-simotya"
+				:role="spectate ? 'button' : undefined"
+				:tabindex="spectate ? 0 : undefined"
+				:aria-label="spectate ? i18n.tsx._mahjong.spectateViewAs({ name: users[Mmj.nextHouse(mj.myHouse)]?.name ?? users[Mmj.nextHouse(mj.myHouse)]?.username ?? i18n.ts._mahjong.cpu }) : undefined"
+				@click="onPlayerTagClick(Mmj.nextHouse(mj.myHouse))"
+				@keydown.enter.prevent="onPlayerTagClick(Mmj.nextHouse(mj.myHouse))"
+				@keydown.space.prevent="onPlayerTagClick(Mmj.nextHouse(mj.myHouse))"
+			>
 				<span :class="$style.playerHouse">{{ houseLabel(Mmj.nextHouse(mj.myHouse)) }}</span>
 				<template v-if="users[Mmj.nextHouse(mj.myHouse)] != null">
 					<MkAvatar :user="users[Mmj.nextHouse(mj.myHouse)]!" style="width: 30px; height: 30px;"/>
@@ -211,7 +256,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 				</template>
 				<span v-if="mj.riichis[Mmj.nextHouse(mj.myHouse)]" :class="$style.riichi">{{ i18n.ts._mahjong.riichi }}</span>
 			</div>
-			<div :class="[$style.playerOfMe, $style.player]">
+			<div
+				:class="[$style.playerOfMe, $style.player, { [$style.playerClickable]: spectate }]"
+				data-testid="mahjong-player-of-me"
+				:role="spectate ? 'button' : undefined"
+				:tabindex="spectate ? 0 : undefined"
+				:aria-label="spectate ? i18n.tsx._mahjong.spectateViewAs({ name: users[mj.myHouse]?.name ?? users[mj.myHouse]?.username ?? i18n.ts._mahjong.cpu }) : undefined"
+				@click="onPlayerTagClick(mj.myHouse)"
+				@keydown.enter.prevent="onPlayerTagClick(mj.myHouse)"
+				@keydown.space.prevent="onPlayerTagClick(mj.myHouse)"
+			>
 				<span :class="$style.playerHouse">{{ houseLabel(mj.myHouse) }}</span>
 				<template v-if="users[mj.myHouse] != null">
 					<MkAvatar :user="users[mj.myHouse]!" style="width: 30px; height: 30px;"/>
@@ -224,7 +278,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 		</div>
 
-		<XHandTiles :class="$style.handTilesOfMe" :tiles="mj.myHandTiles" :doras="mj.doras" :selectableTiles="selectableTiles" :separateLast="isMyTurn && mj.drawnTile != null" @choose="chooseTile"/>
+		<XHandTiles :class="$style.handTilesOfMe" :tiles="mj.myHandTiles" :doras="mj.doras" :selectableTiles="spectate ? null : selectableTiles" :separateLast="!spectate && isMyTurn && mj.drawnTile != null" @choose="chooseTile"/>
 
 		<div :class="$style.myMeldLine">
 			<XHuro v-for="huro in mj.huros[mj.myHouse]" :class="$style.myHuroItem" :huro="huro" :caller="mj.myHouse" :doras="mj.doras"/>
@@ -315,7 +369,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</Transition>
 		</div>
 
-		<div v-if="!tsumoPending" :class="$style.actions" class="_buttons">
+		<div v-if="!tsumoPending && !spectate" :class="$style.actions" class="_buttons">
 			<MkButton v-if="mj.canRon != null" primary gradate data-testid="mahjong-action-ron" @click="ron">{{ i18n.ts._mahjong.ron }}</MkButton>
 			<MkButton v-if="mj.canPon != null && !autoMode.notCall" primary data-testid="mahjong-action-pon" @click="pon">{{ i18n.ts._mahjong.pon }}</MkButton>
 			<MkButton v-if="mj.canCii != null && !autoMode.notCall" primary data-testid="mahjong-action-cii" @click="cii">{{ i18n.ts._mahjong.cii }}</MkButton>
@@ -406,7 +460,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 			<div :class="$style.kyokuResultFooter">
 				<div v-if="timerMode === 'confirm'" :class="$style.kyokuResultTimer">{{ i18n.ts._mahjong.nextKyokuConfirmation }} {{ i18n.tsx._mahjong.remainingSeconds({ n: myTurnTimerRmain }) }}</div>
-				<MkButton primary @click="confirmKyokuResult">{{ i18n.ts._mahjong.confirm }}</MkButton>
+				<MkButton v-if="!spectate" primary @click="confirmKyokuResult">{{ i18n.ts._mahjong.confirm }}</MkButton>
 			</div>
 		</div>
 	</div>
@@ -414,7 +468,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, onActivated, onDeactivated, onMounted, onScopeDispose, onUnmounted, reactive, ref, shallowRef, triggerRef, watch } from 'vue';
+import { computed, onActivated, onDeactivated, onMounted, onScopeDispose, onUnmounted, reactive, ref, shallowRef, toRaw, triggerRef, watch } from 'vue';
 import * as Misskey from 'misskey-js';
 import * as Mmj from 'misskey-mahjong';
 import { useInterval } from '@@/js/use-interval.js';
@@ -424,7 +478,8 @@ import XHandTiles from './hand-tiles.vue';
 import XAnimatedPoints from './animated-points.vue';
 import MkButton from '@/components/MkButton.vue';
 import { deepClone } from '@/utility/clone.js';
-import { ensureSignin } from '@/i.js';
+import { misskeyApi } from '@/utility/misskey-api.js';
+import { $i } from '@/i.js';
 import { i18n } from '@/i18n.js';
 import { useRouter } from '@/router.js';
 import * as sound from '@/utility/sound.js';
@@ -446,19 +501,56 @@ function tileTypeToTileId(type: Mmj.TileType): Mmj.TileId {
 }
 //#endregion
 
-const $i = ensureSignin();
 const router = useRouter();
 
 const props = defineProps<{
 	room: Misskey.entities.MahjongRoomDetailed;
 	connection?: Misskey.IChannelConnection<Misskey.Channels['mahjongRoom']> | null;
+	/** 観戦モード。対局画面をそのまま観戦に使う */
+	spectate?: boolean;
+	/** 観戦の初期視点 (プレイヤー番号)。未指定なら親 (東家の席) */
+	initialViewUserNumber?: 1 | 2 | 3 | 4;
 }>();
 
+const spectate = props.spectate === true;
+
 const room = ref<Misskey.entities.MahjongRoomDetailed>(deepClone(props.room));
-const myUserNumber = computed(() => room.value.user1Id === $i.id ? 1 : room.value.user2Id === $i.id ? 2 : room.value.user3Id === $i.id ? 3 : 4);
-const isPlayer = computed(() => room.value.user1Id === $i.id || room.value.user2Id === $i.id || room.value.user3Id === $i.id || room.value.user4Id === $i.id);
-const mj = shallowRef(new Mmj.PlayerGameEngine(myUserNumber.value, room.value.gameState as unknown as Mmj.PlayerState));
+const myUserNumber = computed(() => room.value.user1Id === $i?.id ? 1 : room.value.user2Id === $i?.id ? 2 : room.value.user3Id === $i?.id ? 3 : 4);
+const isPlayer = computed(() => $i != null && (room.value.user1Id === $i.id || room.value.user2Id === $i.id || room.value.user3Id === $i.id || room.value.user4Id === $i.id));
+
 const houses: Mmj.House[] = ['e', 's', 'w', 'n'];
+const viewNumbers: (1 | 2 | 3 | 4)[] = [1, 2, 3, 4];
+
+/** 観戦中の視点。プレイヤー番号で持つ (席は局ごとに回転するため) */
+const viewUserNumber = ref<1 | 2 | 3 | 4>(props.initialViewUserNumber ?? defaultViewUserNumber(props.room));
+
+/** 画面の描画と PlayerGameEngine が「自分」として扱うプレイヤー番号 */
+function effectiveUserNumber(): 1 | 2 | 3 | 4 {
+	return spectate ? viewUserNumber.value : myUserNumber.value;
+}
+
+function defaultViewUserNumber(_room: Misskey.entities.MahjongRoomDetailed): 1 | 2 | 3 | 4 {
+	const s = _room.gameState as Mmj.PlayerState | null;
+	if (s == null) return 1;
+	if (s.user1House === 'e') return 1;
+	if (s.user2House === 'e') return 2;
+	if (s.user3House === 'e') return 3;
+	if (s.user4House === 'e') return 4;
+	return 1;
+}
+
+/**
+ * gameState を視点プレイヤー用の状態に整えて PlayerGameEngine を作る。
+ * 観戦状態は全手牌が乗っているので、選んだ視点以外を伏せ、鳴き要求を視点分へ再計算する。
+ */
+function createEngine(_room: Misskey.entities.MahjongRoomDetailed, number: 1 | 2 | 3 | 4): Mmj.PlayerGameEngine | null {
+	const state = _room.gameState as unknown as Mmj.PlayerState | null;
+	if (state == null) return null;
+	// room が Vue の深いリアクティビティでラップされているため、structuredClone 対象は生オブジェクトにする
+	return new Mmj.PlayerGameEngine(number, spectate ? Mmj.projectSpectatorState(toRaw(state), number) : state);
+}
+
+const mj = shallowRef<Mmj.PlayerGameEngine>(createEngine(props.room, effectiveUserNumber())!);
 const endedHouses = computed<Mmj.House[]>(() => [...houses].sort((a, b) => mj.value.points[b] - mj.value.points[a]));
 const kyokuResultSummaryHouses = computed<Mmj.House[]>(() => houses.filter((house) => kyokuResults.value[house] == null));
 
@@ -805,6 +897,7 @@ function currentAutoKey(): string | null {
 function runAutoActions() {
 	autoTimer = undefined;
 
+	if (spectate) return;
 	if (props.connection == null || room.value.isEnded || tsumoPending.value || showKyokuResults.value) return;
 
 	const key = currentAutoKey();
@@ -902,6 +995,112 @@ function houseToUser(house: Mmj.House) {
 	return mj.value.user1House === house ? room.value.user1 : mj.value.user2House === house ? room.value.user2 : mj.value.user3House === house ? room.value.user3 : room.value.user4;
 }
 
+function userForNumber(n: 1 | 2 | 3 | 4) {
+	return n === 1 ? room.value.user1 : n === 2 ? room.value.user2 : n === 3 ? room.value.user3 : room.value.user4;
+}
+
+function userNameForNumber(n: 1 | 2 | 3 | 4): string {
+	const user = userForNumber(n);
+	return user == null ? i18n.ts._mahjong.cpu : user.name ?? user.username;
+}
+
+function numberForHouse(house: Mmj.House): 1 | 2 | 3 | 4 {
+	return mj.value.user1House === house ? 1 : mj.value.user2House === house ? 2 : mj.value.user3House === house ? 3 : 4;
+}
+
+function onPlayerTagClick(house: Mmj.House): void {
+	if (spectate) void switchView(numberForHouse(house));
+}
+
+//#region 視点切り替え (観戦) と desync 再同期
+let switching = false;
+
+/**
+ * 取得したルームからエンジンを組み直し、進行中の表示状態を初期化する。
+ */
+function rebuildEngine(_room: Misskey.entities.MahjongRoomDetailed): void {
+	const engine = createEngine(_room, effectiveUserNumber());
+	if (engine != null) {
+		mj.value = engine;
+		triggerRef(mj);
+	}
+
+	closeCiiChoices();
+	clearKyokuResultTimer();
+	clearSerifTimers();
+	lastAutoKey = null;
+	resetAutoModes();
+	showKyokuResults.value = false;
+	kyokuResults.value = {
+		e: null,
+		s: null,
+		w: null,
+		n: null,
+	};
+	ryuukyokued.value = false;
+	ryuukyokuResult.value = null;
+	abortiveKind.value = null;
+	iTsumoed.value = mj.value.turn === mj.value.myHouse && mj.value.drawnTile != null;
+
+	// 初期表示と同じ規則でタイマーを組み直す (観戦は timer が null なので満了時間から)
+	if (hasCall.value) {
+		startTimerWithServerRemaining(CALL_SEC, 'call');
+	} else if (isMyTurn.value) {
+		startTimerWithServerRemaining(room.value.timeLimitForEachTurn, 'turn');
+	} else {
+		resetTurnTimer();
+	}
+}
+
+/**
+ * 観戦視点の切り替え。PlayerGameEngine は「自分」の手牌を進行で追うため、
+ * サーバーから取り直した全開状態を選んだ視点へ射影して組み替える。
+ * 切り替え中のイベントは取りこぼす前提で、組み直し後の状態を正とする。
+ */
+async function switchView(n: 1 | 2 | 3 | 4): Promise<void> {
+	if (!spectate || switching || n === viewUserNumber.value || room.value.isEnded) return;
+	switching = true;
+	detachListeners();
+	cancelAutoTimer();
+	try {
+		viewUserNumber.value = n;
+		const _room = await misskeyApi('mahjong/show-room', {
+			roomId: room.value.id,
+		});
+		room.value = _room;
+		rebuildEngine(_room);
+	} catch (err) {
+		console.error(err);
+	} finally {
+		switching = false;
+		attachListeners();
+	}
+}
+
+/**
+ * commit_* の InvalidOperationError (イベント取りこぼしによる desync) から回復する。
+ * サーバーの最新状態からエンジンを組み直す。
+ */
+async function resync(): Promise<void> {
+	if (switching || room.value.isEnded) return;
+	switching = true;
+	detachListeners();
+	cancelAutoTimer();
+	try {
+		const _room = await misskeyApi('mahjong/show-room', {
+			roomId: room.value.id,
+		});
+		room.value = _room;
+		rebuildEngine(_room);
+	} catch (err) {
+		console.error(err);
+	} finally {
+		switching = false;
+		attachListeners();
+	}
+}
+//#endregion
+
 function houseLabel(house: Mmj.House): string {
 	return house === 'e' ? i18n.ts._mahjong.east : house === 's' ? i18n.ts._mahjong.south : house === 'w' ? i18n.ts._mahjong.west : i18n.ts._mahjong.north;
 }
@@ -931,6 +1130,7 @@ function backToLobby() {
 }
 
 function chooseTile(tile: Mmj.TileId, ev?: MouseEvent) {
+	if (spectate) return;
 	if (tsumoPending.value) return;
 	if (!isMyTurn.value) return;
 
@@ -972,6 +1172,7 @@ function chooseTile(tile: Mmj.TileId, ev?: MouseEvent) {
 }
 
 function switchAutoMode(mode: AutoMode) {
+	if (spectate) return;
 	// モードを切り替えた直後の機会も自動で打てるように、目印をリセットする
 	lastAutoKey = null;
 	autoMode[mode] = !autoMode[mode];
@@ -987,6 +1188,7 @@ function resetAutoModes() {
 }
 
 function riichi() {
+	if (spectate) return;
 	if (!isMyTurn.value) return;
 
 	const tiles = Mmj.getTilesForRiichi(mj.value.myHandTileTypes);
@@ -996,6 +1198,7 @@ function riichi() {
 }
 
 function ankan() {
+	if (spectate) return;
 	if (!isMyTurn.value) return;
 
 	const tiles = mj.value.getAnkanableTiles();
@@ -1012,6 +1215,7 @@ function ankan() {
 }
 
 function sendAnkan(tile: Mmj.TileId) {
+	if (spectate) return;
 	tileSelection.value = null;
 	iTsumoed.value = false;
 	props.connection!.send('ankan', {
@@ -1020,6 +1224,7 @@ function sendAnkan(tile: Mmj.TileId) {
 }
 
 function kakan() {
+	if (spectate) return;
 	if (!mj.value.canKakan()) return;
 
 	const tiles = mj.value.getKakanableTiles();
@@ -1035,6 +1240,7 @@ function kakan() {
 }
 
 function sendKakan(tile: Mmj.TileId) {
+	if (spectate) return;
 	tileSelection.value = null;
 	iTsumoed.value = false;
 	props.connection!.send('kakan', {
@@ -1047,6 +1253,7 @@ function cancelTileSelection() {
 }
 
 function tsumoHora() {
+	if (spectate) return;
 	if (!isMyTurn.value) return;
 
 	props.connection!.send('tsumoHora', {
@@ -1065,6 +1272,7 @@ function clearCalls() {
 }
 
 function ron() {
+	if (spectate) return;
 	props.connection!.send('ronHora', {
 	});
 	closeCiiChoices();
@@ -1073,6 +1281,7 @@ function ron() {
 }
 
 function pon() {
+	if (spectate) return;
 	props.connection!.send('pon', {
 	});
 	closeCiiChoices();
@@ -1081,6 +1290,7 @@ function pon() {
 }
 
 function cii() {
+	if (spectate) return;
 	if (mj.value.canCii == null) return;
 
 	const targetTile = mj.value.hoTiles[mj.value.canCii.callee].at(-1);
@@ -1107,6 +1317,7 @@ function cii() {
 }
 
 function sendCii(choice: CiiChoice) {
+	if (spectate) return;
 	props.connection!.send('cii', {
 		pattern: choice.code,
 	});
@@ -1122,6 +1333,7 @@ function closeCiiChoices() {
 }
 
 function kan() {
+	if (spectate) return;
 	props.connection!.send('kan', {
 	});
 	closeCiiChoices();
@@ -1130,6 +1342,7 @@ function kan() {
 }
 
 function skip() {
+	if (spectate) return;
 	closeCiiChoices();
 	clearCalls();
 
@@ -1138,6 +1351,7 @@ function skip() {
 }
 
 function confirmKyokuResult() {
+	if (spectate) return;
 	props.connection!.send('confirmNextKyoku', {});
 	hideTimer();
 }
@@ -1390,7 +1604,8 @@ function onStreamNextKyoku(log: { room: Misskey.entities.MahjongRoomDetailed }) 
 	clearSerifTimers();
 
 	room.value = log.room;
-	mj.value.commit_nextKyoku(log.room.gameState as unknown as Mmj.PlayerState);
+	const state = log.room.gameState as unknown as Mmj.PlayerState;
+	mj.value.commit_nextKyoku(spectate ? Mmj.projectSpectatorState(state, viewUserNumber.value) : state);
 	triggerRef(mj);
 
 	iTsumoed.value = false;
@@ -1416,8 +1631,7 @@ function onStreamEnded(log: { room: Misskey.entities.MahjongRoomDetailed }) {
 	clearSerifTimers();
 	room.value = log.room;
 	if (room.value.gameState != null) {
-		mj.value = new Mmj.PlayerGameEngine(myUserNumber.value, room.value.gameState as unknown as Mmj.PlayerState);
-		triggerRef(mj);
+		rebuildEngine(log.room);
 	}
 	showKyokuResults.value = false;
 	hideTimer();
@@ -1425,42 +1639,78 @@ function onStreamEnded(log: { room: Misskey.entities.MahjongRoomDetailed }) {
 
 let listening = false;
 
+/**
+ * commit_* が InvalidOperationError を投げたら (イベント取りこぼしによる desync)、
+ * サーバーの最新状態から組み直す。
+ */
+function safe<A extends readonly unknown[]>(fn: (...args: A) => void): (...args: A) => void {
+	return (...args: A) => {
+		try {
+			fn(...args);
+		} catch (e) {
+			if (e instanceof Mmj.PlayerGameEngine.InvalidOperationError) {
+				console.warn('mahjong desync detected; resyncing from server state');
+				void resync();
+			} else {
+				throw e;
+			}
+		}
+	};
+}
+
+const wrappedStreamHandlers = {
+	dahai: safe(onStreamDahai),
+	tsumo: safe(onStreamTsumo),
+	dahaiAndTsumo: safe(onStreamDahaiAndTsumo),
+	ponned: safe(onStreamPonned),
+	kanned: safe(onStreamKanned),
+	kakanned: safe(onStreamKakanned),
+	kakanDeclared: safe(onStreamKakanDeclared),
+	ankanned: safe(onStreamAnkanned),
+	ciied: safe(onStreamCiied),
+	ronned: safe(onStreamRonned),
+	tsumoHora: safe(onStreamTsumoHora),
+	ryuukyoku: safe(onStreamRyuukyoku),
+	nextKyoku: safe(onStreamNextKyoku),
+	ended: safe(onStreamEnded),
+} as const;
+
 function attachListeners() {
 	if (listening || props.connection == null) return;
 	listening = true;
-	props.connection.on('dahai', onStreamDahai);
-	props.connection.on('tsumo', onStreamTsumo);
-	props.connection.on('dahaiAndTsumo', onStreamDahaiAndTsumo);
-	props.connection.on('ponned', onStreamPonned);
-	props.connection.on('kanned', onStreamKanned);
-	props.connection.on('kakanned', onStreamKakanned);
-	props.connection.on('kakanDeclared', onStreamKakanDeclared);
-	props.connection.on('ankanned', onStreamAnkanned);
-	props.connection.on('ciied', onStreamCiied);
-	props.connection.on('ronned', onStreamRonned);
-	props.connection.on('tsumoHora', onStreamTsumoHora);
-	props.connection.on('ryuukyoku', onStreamRyuukyoku);
-	props.connection.on('nextKyoku', onStreamNextKyoku);
-	props.connection.on('ended', onStreamEnded);
+	props.connection.on('dahai', wrappedStreamHandlers.dahai);
+	props.connection.on('tsumo', wrappedStreamHandlers.tsumo);
+	props.connection.on('dahaiAndTsumo', wrappedStreamHandlers.dahaiAndTsumo);
+	props.connection.on('ponned', wrappedStreamHandlers.ponned);
+	props.connection.on('kanned', wrappedStreamHandlers.kanned);
+	props.connection.on('kakanned', wrappedStreamHandlers.kakanned);
+	props.connection.on('kakanDeclared', wrappedStreamHandlers.kakanDeclared);
+	props.connection.on('ankanned', wrappedStreamHandlers.ankanned);
+	props.connection.on('ciied', wrappedStreamHandlers.ciied);
+	props.connection.on('ronned', wrappedStreamHandlers.ronned);
+	props.connection.on('tsumoHora', wrappedStreamHandlers.tsumoHora);
+	props.connection.on('ryuukyoku', wrappedStreamHandlers.ryuukyoku);
+	props.connection.on('nextKyoku', wrappedStreamHandlers.nextKyoku);
+	props.connection.on('ended', wrappedStreamHandlers.ended);
 }
 
 function detachListeners() {
 	if (!listening || props.connection == null) return;
 	listening = false;
-	props.connection.off('dahai', onStreamDahai);
-	props.connection.off('tsumo', onStreamTsumo);
-	props.connection.off('dahaiAndTsumo', onStreamDahaiAndTsumo);
-	props.connection.off('ponned', onStreamPonned);
-	props.connection.off('kanned', onStreamKanned);
-	props.connection.off('kakanned', onStreamKakanned);
-	props.connection.off('kakanDeclared', onStreamKakanDeclared);
-	props.connection.off('ankanned', onStreamAnkanned);
-	props.connection.off('ciied', onStreamCiied);
-	props.connection.off('ronned', onStreamRonned);
-	props.connection.off('tsumoHora', onStreamTsumoHora);
-	props.connection.off('ryuukyoku', onStreamRyuukyoku);
-	props.connection.off('nextKyoku', onStreamNextKyoku);
-	props.connection.off('ended', onStreamEnded);
+	props.connection.off('dahai', wrappedStreamHandlers.dahai);
+	props.connection.off('tsumo', wrappedStreamHandlers.tsumo);
+	props.connection.off('dahaiAndTsumo', wrappedStreamHandlers.dahaiAndTsumo);
+	props.connection.off('ponned', wrappedStreamHandlers.ponned);
+	props.connection.off('kanned', wrappedStreamHandlers.kanned);
+	props.connection.off('kakanned', wrappedStreamHandlers.kakanned);
+	props.connection.off('kakanDeclared', wrappedStreamHandlers.kakanDeclared);
+	props.connection.off('ankanned', wrappedStreamHandlers.ankanned);
+	props.connection.off('ciied', wrappedStreamHandlers.ciied);
+	props.connection.off('ronned', wrappedStreamHandlers.ronned);
+	props.connection.off('tsumoHora', wrappedStreamHandlers.tsumoHora);
+	props.connection.off('ryuukyoku', wrappedStreamHandlers.ryuukyoku);
+	props.connection.off('nextKyoku', wrappedStreamHandlers.nextKyoku);
+	props.connection.off('ended', wrappedStreamHandlers.ended);
 }
 
 onMounted(attachListeners);
@@ -2245,6 +2495,11 @@ onUnmounted(() => {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+.playerClickable {
+	// 観戦時は名札をクリックして視点に選ぶ (.playersContainer の pointer-events: none を子で解禁する)
+	pointer-events: auto;
+	cursor: pointer;
+}
 .playerHouse {
 	flex-shrink: 0;
 	opacity: 0.75;
@@ -2440,6 +2695,50 @@ onUnmounted(() => {
 		&:not(:disabled):active {
 			background: color-mix(in srgb, var(--MI_THEME-accent) 85%, var(--MI_THEME-fg));
 		}
+	}
+}
+
+.spectateControls {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+}
+
+.spectateBadge {
+	padding: 2px 10px;
+	border-radius: 999px;
+	background: var(--MI_THEME-accent);
+	color: var(--MI_THEME-fgOnAccent);
+	font-size: 80%;
+	white-space: nowrap;
+}
+
+.spectateViewButton {
+	min-width: max-content;
+	max-width: 120px;
+	padding: 3px 8px;
+	border-radius: 999px;
+	background: color-mix(in srgb, black 40%, transparent);
+	color: #fff;
+	font-size: 11px;
+	text-shadow: 0 1px 2px #000;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+
+	&:hover {
+		background: color-mix(in srgb, black 60%, transparent);
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--MI_THEME-focus);
+		outline-offset: 2px;
+	}
+
+	&.spectateViewButtonActive {
+		background: var(--MI_THEME-accent);
+		color: var(--MI_THEME-fgOnAccent);
 	}
 }
 

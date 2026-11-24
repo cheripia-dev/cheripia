@@ -16309,6 +16309,26 @@ export interface Locale extends ILocale {
          */
         "spectating": string;
         /**
+         * {name}の視点で観戦
+         */
+        "spectateViewAs": ParameterizedString<"name">;
+        /**
+         * ルームが存在しないか、観戦できません。
+         */
+        "spectateRoomNotFound": string;
+        /**
+         * 観戦できる対局がありません。
+         */
+        "spectateNotStarted": string;
+        /**
+         * 対局は終了しています。
+         */
+        "spectateEnded": string;
+        /**
+         * CPU
+         */
+        "cpu": string;
+        /**
          * 対局中のルーム
          */
         "activeRooms": string;

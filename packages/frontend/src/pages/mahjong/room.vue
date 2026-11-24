@@ -5,8 +5,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <template>
 <div v-if="room == null"><MkLoading/></div>
-<RoomSetting v-else-if="!room.isStarted && !room.isEnded" :room="room" :connection="connection!"/>
-<RoomGame v-else :room="room" :connection="connection"/>
+<RoomSetting v-else-if="!spectate && !room.isStarted && !room.isEnded" :room="room" :connection="connection!"/>
+<RoomGame v-else :room="room" :connection="connection" :spectate="spectate === true" :initialViewUserNumber="initialViewUserNumber"/>
 </template>
 
 <script lang="ts" setup>
@@ -18,21 +18,39 @@ import RoomGame from './room.game.vue';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { definePage } from '@/page.js';
 import { useStream } from '@/stream.js';
-import { ensureSignin } from '@/i.js';
+import { $i } from '@/i.js';
 import { useRouter } from '@/router.js';
 import * as os from '@/os.js';
 import { i18n } from '@/i18n.js';
-
-const $i = ensureSignin();
 
 const router = useRouter();
 
 const props = defineProps<{
 	roomId: string;
+	spectate?: boolean;
+	// 観戦時に ?user= で指定されたプレイヤーの ID
+	spectateUser?: string;
 }>();
 
 const room = shallowRef<Misskey.entities.MahjongRoomDetailed | null>(null);
 const connection = shallowRef<Misskey.IChannelConnection<Misskey.Channels['mahjongRoom']> | null>(null);
+
+// 観戦の初期視点。指定 ID が参加者にいなければ親 (東家の席のプレイヤー)
+const initialViewUserNumber = computed<1 | 2 | 3 | 4 | undefined>(() => {
+	if (props.spectate !== true || room.value == null) return undefined;
+	if (props.spectateUser != null) {
+		const index = [room.value.user1Id, room.value.user2Id, room.value.user3Id, room.value.user4Id].indexOf(props.spectateUser);
+		if (index !== -1) return (index + 1) as 1 | 2 | 3 | 4;
+	}
+	const s = room.value.gameState as { user1House?: string; user2House?: string; user3House?: string; user4House?: string } | null;
+	if (s != null) {
+		if (s.user1House === 'e') return 1;
+		if (s.user2House === 'e') return 2;
+		if (s.user3House === 'e') return 3;
+		if (s.user4House === 'e') return 4;
+	}
+	return 1;
+});
 
 watch(() => props.roomId, () => {
 	fetchGame();
@@ -42,7 +60,90 @@ function start(_room: Misskey.entities.MahjongRoomDetailed) {
 	room.value = _room;
 }
 
+async function leaveToLobby(text: string): Promise<void> {
+	await os.alert({
+		type: 'warning',
+		text,
+	});
+	router.pushByPath('/mahjong');
+}
+
+function disposeConnection() {
+	if (connection.value) {
+		connection.value.dispose();
+		connection.value = null;
+	}
+}
+
+function isMember(_room: Misskey.entities.MahjongRoomDetailed): boolean {
+	return $i != null && [_room.user1Id, _room.user2Id, _room.user3Id, _room.user4Id].includes($i.id);
+}
+
+/**
+ * 観戦としてルームを取得する。
+ * 対局者本人が観戦 URL を開いた場合は通常の対局画面へ移す。
+ */
+async function fetchForSpectate() {
+	let _room: Misskey.entities.MahjongRoomDetailed;
+	try {
+		_room = await misskeyApi('mahjong/show-room', {
+			roomId: props.roomId,
+		});
+	} catch (err) {
+		console.error(err);
+		await leaveToLobby(i18n.ts._mahjong.spectateRoomNotFound);
+		return;
+	}
+
+	if (isMember(_room)) {
+		// 対局者本人は通常の対局画面へ
+		router.pushByPath(`/mahjong/g/${_room.id}`);
+		return;
+	}
+	if (_room.isEnded) {
+		await leaveToLobby(i18n.ts._mahjong.spectateEnded);
+		return;
+	}
+	if (!_room.isStarted) {
+		await leaveToLobby(i18n.ts._mahjong.spectateNotStarted);
+		return;
+	}
+
+	room.value = _room;
+	connect();
+}
+
+function connect() {
+	disposeConnection();
+	connection.value = useStream().useChannel('mahjongRoom', {
+		roomId: props.roomId,
+	});
+	connection.value.on('started', x => {
+		start(x.room);
+	});
+	connection.value.on('canceled', x => {
+		disposeConnection();
+
+		if ($i == null || x.userId !== $i.id) {
+			void leaveToLobby(i18n.ts._mahjong.roomCanceled);
+		}
+	});
+	connection.value.on('kicked', x => {
+		// 観戦者はどこの席からも追放されない。追放されたのは対局者なので無視する。
+		if (props.spectate === true || $i == null || x.userId !== $i.id) return;
+
+		disposeConnection();
+
+		void leaveToLobby(i18n.ts._mahjong.kicked);
+	});
+}
+
 async function fetchGame() {
+	if (props.spectate === true) {
+		await fetchForSpectate();
+		return;
+	}
+
 	try {
 		const _room = await misskeyApi('mahjong/join-room', {
 			roomId: props.roomId,
@@ -68,41 +169,9 @@ async function fetchGame() {
 		return;
 	}
 
-	if (connection.value) {
-		connection.value.dispose();
-		connection.value = null;
-	}
+	disposeConnection();
 	if (!room.value.isEnded) {
-		connection.value = useStream().useChannel('mahjongRoom', {
-			roomId: room.value.id,
-		});
-		connection.value.on('started', x => {
-			start(x.room);
-		});
-		connection.value.on('canceled', x => {
-			connection.value?.dispose();
-			connection.value = null;
-
-			if (x.userId !== $i.id) {
-				os.alert({
-					type: 'warning',
-					text: i18n.ts._mahjong.roomCanceled,
-				});
-				router.pushByPath('/mahjong');
-			}
-		});
-		connection.value.on('kicked', x => {
-			if (x.userId !== $i.id) return;
-
-			connection.value?.dispose();
-			connection.value = null;
-
-			os.alert({
-				type: 'warning',
-				text: i18n.ts._mahjong.kicked,
-			});
-			router.pushByPath('/mahjong');
-		});
+		connect();
 	}
 }
 
@@ -143,7 +212,7 @@ onUnmounted(() => {
 });
 
 definePage(computed(() => ({
-	title: i18n.ts._mahjong.mahjong,
-	icon: 'ti ti-device-gamepad',
+	title: props.spectate === true ? i18n.ts._mahjong.spectating : i18n.ts._mahjong.mahjong,
+	icon: props.spectate === true ? 'ti ti-eye' : 'ti ti-device-gamepad',
 })));
 </script>

@@ -760,7 +760,13 @@ describe('Master game engine drawn tile', () => {
 
 		expect(engine.createPlayerState(1).drawnTile).toBe(53);
 		expect(engine.createPlayerState(2).drawnTile).toBeNull();
-		expect(engine.createSpectatorState().drawnTile).toBe(53);
+		const spectatorState = engine.createSpectatorState();
+		expect(spectatorState.drawnTile).toBe(53);
+		expect(spectatorState.spectator).toBe(true);
+		// user1 視点の鳴き要求は観戦状態に含めず、要求そのものは askings で渡す
+		expect(spectatorState.canPon).toBeNull();
+		expect(spectatorState.canRon).toBeNull();
+		expect(spectatorState.askings).toEqual({ ron: null, pon: null, cii: null, kan: null });
 
 		engine.$state.turn = 's';
 		engine.$state.drawnTile = 2;

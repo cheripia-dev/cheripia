@@ -1581,4 +1581,30 @@ describe('MahjongService turn and call deadlines', () => {
 			service.dispose();
 		}
 	});
+
+	test('packSpectatorRoom sends the full state with askings and no per-player call flags', async () => {
+		const room = createRoom();
+		room.gameState = createCallAskingState();
+		const { service } = createTimerService(room);
+		try {
+			const packed = await service.packSpectatorRoom(room);
+			const state = packed.gameState as unknown as Mmj.PlayerState;
+
+			expect(state.spectator).toBe(true);
+			// 全手牌が素牌のまま届く (視点はクライアントの projectSpectatorState で伏せる)
+			expect(state.handTiles.e).not.toEqual(expect.arrayContaining([0]));
+			expect(state.handTiles.n).not.toEqual(expect.arrayContaining([0]));
+			// 手番のツモ牌も観戦状態では開示される
+			expect(state.drawnTile).toBe(17);
+			// user1 視点の鳴き要求は漏らさず、要求そのものは askings で渡す
+			expect(state.canPon).toBeNull();
+			expect(state.canCii).toBeNull();
+			expect(state.canKan).toBeNull();
+			expect(state.canRon).toBeNull();
+			expect(state.askings).toBeDefined();
+			expect(state.askings?.pon).toBeNull();
+		} finally {
+			service.dispose();
+		}
+	});
 });

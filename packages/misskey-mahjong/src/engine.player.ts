@@ -18,6 +18,18 @@ function $type(tid: TileId): TileType {
 }
 //#endregion
 
+/**
+ * 観戦状態でのみ送られる、鳴き・ロン待ちの要求情報。
+ * canPon / canCii / canKan / canRon は視点1人分しか表現できないため、
+ * 観戦者はこの情報から自分の選んだ視点の要求を計算する。
+ */
+export type SpectatorAskings = {
+	ron: { callee: House; callers: House[] } | null;
+	pon: { callee: House; callers: House[] } | null;
+	cii: { callee: House; caller: House } | null;
+	kan: { callee: House; callers: House[] } | null;
+};
+
 export type PlayerState = {
 	user1House: House;
 	user2House: House;
@@ -109,6 +121,10 @@ export type PlayerState = {
 	canKan: { callee: House } | null; // = 大明槓
 	canRon: { callee: House } | null;
 	spectator?: boolean;
+	/**
+	 * 観戦状態での鳴き・ロン待ちの要求。spectator が true のときだけ含まれる。
+	 */
+	askings?: SpectatorAskings;
 };
 
 export type KyokuResult = {
@@ -117,14 +133,47 @@ export type KyokuResult = {
 	pointDeltas: { e: number; s: number; w: number; n: number; };
 };
 
+const ALL_HOUSES = ['e', 's', 'w', 'n'] as const;
+
+/**
+ * 全手牌公開の観戦状態 (createSpectatorState) を、選んだプレイヤー1人の視点へ射影する。
+ * - 選択したプレイヤー以外の手牌と暗槓を伏せる (PlayerGameEngine が想定するプレイヤー状態と同じ形にする)
+ * - 鳴き・ロン待ちの要求 (canPon / canCii / canKan / canRon) を askings から選択プレイヤー分として再計算する
+ *   (createPlayerState の席判定と同じ条件を使う)
+ * - spectator を false にして PlayerGameEngine に通常のプレイヤー状態として扱わせる
+ * 観戦者へはイベントが全開配信されるため、この射影を毎回適用すれば選んだ視点の外側の秘密牌は画面に出ない。
+ */
+export function projectSpectatorState(state: PlayerState, myUserNumber: 1 | 2 | 3 | 4): PlayerState {
+	const view = structuredClone(state);
+	const house = myUserNumber === 1 ? view.user1House : myUserNumber === 2 ? view.user2House : myUserNumber === 3 ? view.user3House : view.user4House;
+	const askings = view.askings;
+
+	for (const h of ALL_HOUSES) {
+		if (h === house) continue;
+		view.handTiles[h] = view.handTiles[h].map((): 0 => 0);
+		view.huros[h] = view.huros[h].map((huro): Huro => huro.type === 'ankan' ? { ...huro, tiles: [0, 0, 0, 0] as const } : huro);
+	}
+
+	// ツモ牌は手番の本人にだけ見せる (createPlayerState と同じ規則)
+	view.drawnTile = view.turn === house ? (view.drawnTile ?? null) : null;
+
+	const canCall = !view.riichis[house];
+	view.canPon = canCall && askings?.pon != null && askings.pon.callers.includes(house) ? { callee: askings.pon.callee } : null;
+	view.canCii = canCall && askings?.cii != null && askings.cii.caller === house ? { callee: askings.cii.callee } : null;
+	view.canKan = canCall && askings?.kan != null && askings.kan.callers.includes(house) ? { callee: askings.kan.callee } : null;
+	view.canRon = askings?.ron != null && askings.ron.callers.includes(house) ? { callee: askings.ron.callee } : null;
+	view.spectator = false;
+
+	return view;
+}
+
 export class PlayerGameEngine {
 	/**
 	 * このエラーが発生したときはdesyncが疑われる
 	 */
 	public static InvalidOperationError = class extends Error {};
 
-	private myUserNumber: 1 | 2 | 3 | 4;
-	private state: PlayerState;
+	private myUserNumber: 1 | 2 | 3 | 4;	private state: PlayerState;
 	private furiten = false;
 	private riichiFuriten = false;
 

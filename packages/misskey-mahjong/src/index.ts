@@ -8,8 +8,8 @@ export * from './common.js';
 
 export { MasterGameEngine, isTobiPoints, isMatchLength, AbortiveDrawError } from './engine.master.js';
 export type { MasterState, MatchLength, AbortiveDrawKind } from './engine.master.js';
-export { PlayerGameEngine } from './engine.player.js';
-export type { PlayerState } from './engine.player.js';
+export { PlayerGameEngine, projectSpectatorState } from './engine.player.js';
+export type { PlayerState, SpectatorAskings } from './engine.player.js';
 export { convertHuroForCalcYaku, getWaitTiles } from './common.yaku.js';
 export { calcFu } from './common.fu.js';
 export type { FuCalcEnv } from './common.fu.js';

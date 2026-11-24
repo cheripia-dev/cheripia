@@ -5,7 +5,7 @@
 
 import assert from 'node:assert';
 import { TileId } from '../src/common.js';
-import { PlayerGameEngine, PlayerState } from '../src/engine.player.js';
+import { PlayerGameEngine, PlayerState, projectSpectatorState } from '../src/engine.player.js';
 
 function createState(): PlayerState {
 	return {
@@ -372,5 +372,128 @@ describe('Player game engine kakan', () => {
 		assert.deepStrictEqual(engine.myHandTiles, [17, 1, 5, 9, 21, 25, 29, 33, 37, 41, 34]);
 		assert.strictEqual(engine.drawnTile, 34);
 		assert.strictEqual(engine.huros.e[0].type, 'minkan');
+	});
+});
+
+describe('Spectator state projection', () => {
+	function createSpectatorStatePreset(preset: Partial<PlayerState> = {}): PlayerState {
+		return {
+			...createState(),
+			spectator: true,
+			handTiles: {
+				e: [1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49],
+				s: [2, 6, 10, 14, 18, 22, 26, 30, 34, 38, 42, 46, 50],
+				w: [3, 7, 11, 15, 19, 23, 27, 31, 35, 39, 43, 47, 51],
+				n: [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52],
+			},
+			askings: { ron: null, pon: null, cii: null, kan: null },
+			...preset,
+		};
+	}
+
+	it('全手牌公開の観戦状態から、選んだ視点以外の手牌を伏せる', () => {
+		const view = projectSpectatorState(createSpectatorStatePreset(), 2);
+
+		assert.deepStrictEqual(view.handTiles.s, [2, 6, 10, 14, 18, 22, 26, 30, 34, 38, 42, 46, 50]);
+		for (const house of ['e', 'w', 'n'] as const) {
+			assert.deepStrictEqual(view.handTiles[house], new Array(13).fill(0), `house ${house} must be hidden`);
+		}
+		assert.strictEqual(view.spectator, false);
+	});
+
+	it('視点以外の暗槓を伏せ、視点の暗槓は明らかな形 (両端+伏せ2枚) を保つ', () => {
+		const state = createSpectatorStatePreset();
+		state.huros.e = [{ type: 'ankan', tiles: [1, 2, 3, 4] }];
+		state.huros.s = [{ type: 'ankan', tiles: [21, 22, 23, 24] }];
+
+		const view = projectSpectatorState(state, 2);
+
+		assert.deepStrictEqual(view.huros.e[0]!.tiles, [0, 0, 0, 0]);
+		assert.deepStrictEqual(view.huros.s[0]!.tiles, [21, 22, 23, 24]);
+	});
+
+	it('ツモ牌は手番の視点にだけ見せる', () => {
+		const state = createSpectatorStatePreset({ turn: 'e', drawnTile: 49 });
+
+		assert.strictEqual(projectSpectatorState(state, 1).drawnTile, 49);
+		assert.strictEqual(projectSpectatorState(state, 2).drawnTile, null);
+	});
+
+	it('askings から視点ごとの鳴き要求を再計算する', () => {
+		const state = createSpectatorStatePreset({
+			turn: null,
+			askings: {
+				ron: { callee: 'e', callers: ['w', 's'] },
+				pon: { callee: 'e', callers: ['w', 's'] },
+				cii: { callee: 'e', caller: 's' },
+				kan: { callee: 'e', callers: ['w'] },
+			},
+		});
+
+		// user2 = 席 s
+		const viewS = projectSpectatorState(state, 2);
+		assert.deepStrictEqual(viewS.canRon, { callee: 'e' });
+		assert.deepStrictEqual(viewS.canPon, { callee: 'e' });
+		assert.deepStrictEqual(viewS.canCii, { callee: 'e' });
+		assert.strictEqual(viewS.canKan, null);
+
+		// user3 = 席 w
+		const viewW = projectSpectatorState(state, 3);
+		assert.deepStrictEqual(viewW.canRon, { callee: 'e' });
+		assert.deepStrictEqual(viewW.canPon, { callee: 'e' });
+		assert.deepStrictEqual(viewW.canKan, { callee: 'e' });
+		assert.strictEqual(viewW.canCii, null);
+
+		// user1 = 席 e (捨てた本人)
+		const viewE = projectSpectatorState(state, 1);
+		assert.strictEqual(viewE.canRon, null);
+		assert.strictEqual(viewE.canPon, null);
+		assert.strictEqual(viewE.canCii, null);
+		assert.strictEqual(viewE.canKan, null);
+	});
+
+	it('リーチ済みの視点は鳴けず、ロンは要求される', () => {
+		const state = createSpectatorStatePreset({
+			turn: null,
+			riichis: { e: false, s: true, w: false, n: false },
+			askings: {
+				ron: { callee: 'e', callers: ['s'] },
+				pon: { callee: 'e', callers: ['s'] },
+				cii: { callee: 'e', caller: 's' },
+				kan: { callee: 'e', callers: ['s'] },
+			},
+		});
+
+		const view = projectSpectatorState(state, 2);
+		assert.deepStrictEqual(view.canRon, { callee: 'e' });
+		assert.strictEqual(view.canPon, null);
+		assert.strictEqual(view.canCii, null);
+		assert.strictEqual(view.canKan, null);
+	});
+
+	it('席が回転していても視点プレイヤーの席で射影する', () => {
+		const state = createSpectatorStatePreset({
+			user1House: 's',
+			user2House: 'w',
+			user3House: 'n',
+			user4House: 'e',
+		});
+
+		const view = projectSpectatorState(state, 1);
+
+		// user1 の席は s
+		assert.deepStrictEqual(view.handTiles.s, state.handTiles.s);
+		assert.deepStrictEqual(view.handTiles.e, new Array(13).fill(0));
+	});
+
+	it('元の観戦状態を書き換えず、PlayerGameEngine をそのまま通せる', () => {
+		const state = createSpectatorStatePreset();
+
+		const view = projectSpectatorState(state, 2);
+		assert.deepStrictEqual(state.handTiles.e, [1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49]);
+
+		const engine = new PlayerGameEngine(2, view);
+		assert.strictEqual(engine.myHouse, 's');
+		assert.strictEqual(engine.myHandTiles.length, 13);
 	});
 });

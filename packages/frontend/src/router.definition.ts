@@ -653,6 +653,9 @@ export const ROUTE_DEF = [{
 }, {
 	path: '/mahjong/g/:roomId/spectate',
 	component: page(() => import('@/pages/mahjong/spectate.vue')),
+	query: {
+		user: 'spectateUser',
+	},
 	loginRequired: false,
 }, {
 	path: '/mahjong/g/:roomId',
