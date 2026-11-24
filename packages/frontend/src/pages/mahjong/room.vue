@@ -82,6 +82,18 @@ async function fetchGame() {
 				router.pushByPath('/mahjong');
 			}
 		});
+		connection.value.on('kicked', x => {
+			if (x.userId !== $i.id) return;
+
+			connection.value?.dispose();
+			connection.value = null;
+
+			os.alert({
+				type: 'warning',
+				text: i18n.ts._mahjong.kicked,
+			});
+			router.pushByPath('/mahjong');
+		});
 	}
 }
 
@@ -90,9 +102,16 @@ useInterval(async () => {
 	if (room.value == null) return;
 	if (room.value.isStarted) return;
 
-	const _room = await misskeyApi('mahjong/show-room', {
-		roomId: props.roomId,
-	});
+	let _room: Misskey.entities.MahjongRoomDetailed;
+	try {
+		_room = await misskeyApi('mahjong/show-room', {
+			roomId: props.roomId,
+		});
+	} catch (err) {
+		// ルームが消えた、席から外されたなどの場合は canceled / kicked での離脱に委ね、次tickで再試行する
+		console.error(err);
+		return;
+	}
 
 	if (_room.isStarted || _room.isEnded) {
 		start(_room);

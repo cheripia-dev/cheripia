@@ -71,6 +71,15 @@ export class MahjongRoomChannel extends Channel {
 
 		if (this.user == null) return;
 
+		if (message.type === 'kicked' && message.body.userId === this.user.id) {
+			// Kickされた本人に通知し、この接続への以降の配信を止める。
+			// 退席したプレイヤーの接続が購読を続けていると、対局開始時に席のないユーザーへ
+			// 対局情報を送ろうとしてpackRoomが失敗する。画面遷移はフロントエンド側で行う。
+			this.send('kicked', message.body as unknown as JsonValue);
+			this.subscriber.off(`mahjongRoomStream:${this.roomId!}`, this.onMahjongRoomStreamMessage);
+			return;
+		}
+
 		if (message.type === 'started' || message.type === 'nextKyoku' || message.type === 'ended') {
 			if (message.type !== 'ended') {
 				this.myHouse = this.mahjongService.getHouseOfUser(message.body.room, this.user);
@@ -122,6 +131,11 @@ export class MahjongRoomChannel extends Channel {
 				if (!isJsonObject(body)) return;
 				if (body.index !== 2 && body.index !== 3 && body.index !== 4) return;
 				this.removeAi(body.index);
+				break;
+			case 'kick':
+				if (!isJsonObject(body)) return;
+				if (body.index !== 2 && body.index !== 3 && body.index !== 4) return;
+				this.kick(body.index);
 				break;
 			case 'leave':
 				this.leaveRoom();
@@ -196,6 +210,12 @@ export class MahjongRoomChannel extends Channel {
 	private async removeAi(index: 2 | 3 | 4) {
 		if (this.user == null) return;
 		await this.mahjongService.removeAi(this.roomId!, this.user, index);
+	}
+
+	@bindThis
+	private async kick(index: 2 | 3 | 4) {
+		if (this.user == null) return;
+		await this.mahjongService.kickUser(this.roomId!, this.user, index);
 	}
 
 	@bindThis

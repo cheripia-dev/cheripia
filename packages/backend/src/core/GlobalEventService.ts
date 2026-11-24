@@ -250,6 +250,10 @@ export interface MahjongRoomEventTypes {
 	left: {
 		index: number;
 	};
+	kicked: {
+		index: number;
+		userId: MiUser['id'];
+	};
 	canceled: {
 		userId: MiUser['id'];
 	};

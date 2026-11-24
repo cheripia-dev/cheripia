@@ -581,3 +581,131 @@ describe('MahjongService getActiveRooms', () => {
 		}
 	});
 });
+
+describe('MahjongService kickUser', () => {
+	function createLobbyRoom(): MahjongRoom {
+		return {
+			...createRoom(),
+			startedAt: null,
+			isStarted: false,
+			isEnded: false,
+			user1Ready: true,
+			user2Ready: true,
+			user3Ready: true,
+			user4Ready: false,
+		};
+	}
+
+	function createLobbyService(room: MahjongRoom) {
+		const store = new Map<string, string>();
+		store.set(`mahjong:room:${room.id}`, JSON.stringify(room));
+		const { redisClient } = createRedisMock(store);
+
+		const published: Array<{ type: string; payload: unknown }> = [];
+		const globalEventService = {
+			publishMahjongRoomStream: (_roomId: string, type: string, payload: unknown) => {
+				published.push({ type, payload });
+			},
+		};
+		const userEntityService = {
+			pack: (user: MiUser) => Promise.resolve({ id: user.id, username: user.id }),
+		};
+
+		const service = new MahjongService(
+			redisClient as unknown as ConstructorParameters<typeof MahjongService>[0],
+			userEntityService as unknown as ConstructorParameters<typeof MahjongService>[1],
+			globalEventService as unknown as ConstructorParameters<typeof MahjongService>[2],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
+		);
+
+		return { service, store, published };
+	}
+
+	const owner = { id: 'user1' } as unknown as MiUser;
+	const user3 = { id: 'user3' } as unknown as MiUser;
+
+	test('kicks a player out of the seat and publishes kicked, left and changeReadyStates', async () => {
+		const { service, store, published } = createLobbyService(createLobbyRoom());
+		try {
+			const room = await service.kickUser('test-room', owner, 3);
+
+			expect(room).not.toBeNull();
+			expect(room!.user3Id).toBeNull();
+			expect(room!.user4Id).toBe('user4');
+			expect(room!.user3Ready).toBe(false);
+			// 保存済みルームにも反映されている
+			expect(JSON.parse(store.get('mahjong:room:test-room')!).user3Id).toBeNull();
+
+			expect(published.map(call => call.type)).toEqual(['kicked', 'left', 'changeReadyStates']);
+			expect(published[0]!.payload).toEqual({ index: 3, userId: 'user3' });
+			expect(published[1]!.payload).toEqual({ index: 3 });
+			expect(published[2]!.payload).toEqual({ user1: true, user2: true, user3: false, user4: false });
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('rejects a kick requested by a non-owner', async () => {
+		const { service, published } = createLobbyService(createLobbyRoom());
+		try {
+			await expect(service.kickUser('test-room', user2, 3)).rejects.toThrow('access denied');
+
+			const room = await service.getRoom('test-room');
+			expect(room!.user3Id).toBe('user3');
+			expect(published).toEqual([]);
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('does not kick once the game has started', async () => {
+		const room = createLobbyRoom();
+		room.isStarted = true;
+		room.startedAt = new Date(0).toISOString();
+		const { service, published } = createLobbyService(room);
+		try {
+			expect(await service.kickUser('test-room', owner, 3)).toBeNull();
+
+			const latest = await service.getRoom('test-room');
+			expect(latest!.user3Id).toBe('user3');
+			expect(published).toEqual([]);
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('does not kick an empty seat or a CPU seat', async () => {
+		const lobby = createLobbyRoom();
+		lobby.user4Id = null;
+		lobby.user4 = null;
+		lobby.user2Id = null;
+		lobby.user2 = null;
+		lobby.user2Ai = true;
+		const { service, published } = createLobbyService(lobby);
+		try {
+			// 空席
+			expect(await service.kickUser('test-room', owner, 4)).toBeNull();
+			// CPUの席はremoveAiで削除する
+			expect(await service.kickUser('test-room', owner, 2)).toBeNull();
+
+			const latest = await service.getRoom('test-room');
+			expect(latest!.user2Ai).toBe(true);
+			expect(latest!.user3Id).toBe('user3');
+			expect(published).toEqual([]);
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('lets a kicked player join the room again', async () => {
+		const { service } = createLobbyService(createLobbyRoom());
+		try {
+			expect(await service.kickUser('test-room', owner, 3)).not.toBeNull();
+
+			const rejoined = await service.joinRoom('test-room', user3);
+			expect(rejoined!.user3Id).toBe('user3');
+		} finally {
+			service.dispose();
+		}
+	});
+});

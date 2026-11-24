@@ -1082,6 +1082,10 @@ export type Channels = {
             left: (payload: {
                 index: number;
             }) => void;
+            kicked: (payload: {
+                index: number;
+                userId: string;
+            }) => void;
             canceled: (payload: {
                 userId: string;
             }) => void;
@@ -1187,6 +1191,9 @@ export type Channels = {
                 value: 'east' | 'south';
             };
             removeAi: {
+                index: number;
+            };
+            kick: {
                 index: number;
             };
             leave: Record<string, never>;
@@ -4314,7 +4321,7 @@ type VerifyEmailRequest = operations['verify-email']['requestBody']['content']['
 // src/streaming.ts:57:3 - (ae-forgotten-export) The symbol "ReconnectingWebSocket" needs to be exported by the entry point index.d.ts
 // src/streaming.types.ts:271:4 - (ae-forgotten-export) The symbol "ReversiUpdateKey" needs to be exported by the entry point index.d.ts
 // src/streaming.types.ts:287:4 - (ae-forgotten-export) The symbol "ReversiUpdateSettings" needs to be exported by the entry point index.d.ts
-// src/streaming.types.ts:374:5 - (ae-forgotten-export) The symbol "MahjongHouse" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:378:5 - (ae-forgotten-export) The symbol "MahjongHouse" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

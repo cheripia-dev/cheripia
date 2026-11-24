@@ -32,6 +32,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					<div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
 						<span v-if="seatReady(index)" style="color: var(--MI_THEME-success);">準備完了</span>
 						<MkButton v-if="isOwner && !room.isStarted && !room.isEnded && seatAi(index)" small danger @click="removeCpu(index)">削除</MkButton>
+						<MkButton v-if="canKick(index)" small danger @click="kick(index)">{{ i18n.ts._mahjong.kick }}</MkButton>
 					</div>
 				</div>
 				<div v-if="!isOwner || room.isStarted || room.isEnded" style="margin-top: 8px; font-size: 90%; opacity: 0.8;">
@@ -199,6 +200,27 @@ function addCpu() {
 
 function removeCpu(index: number) {
 	props.connection.send('removeAi', { index });
+}
+
+function canKick(index: number): boolean {
+	if (!isOwner.value) return false;
+	if (room.value.isStarted || room.value.isEnded) return false;
+	const user = seatUser(index);
+	// 部屋主自身の席とCPU席は対象外 (CPU席は「削除」で消す)
+	return user != null && user.id !== $i.id;
+}
+
+async function kick(index: number) {
+	const user = seatUser(index);
+	if (user == null) return;
+
+	const { canceled } = await os.confirm({
+		type: 'warning',
+		text: i18n.tsx._mahjong.kickConfirm({ name: user.name ?? user.username }),
+	});
+	if (canceled) return;
+
+	props.connection.send('kick', { index });
 }
 
 function onChangeReadyStates(states: {

@@ -349,6 +349,10 @@ export type Channels = {
 			left: (payload: {
 				index: number;
 			}) => void;
+			kicked: (payload: {
+				index: number;
+				userId: string;
+			}) => void;
 			canceled: (payload: {
 				userId: string;
 			}) => void;
@@ -454,6 +458,9 @@ export type Channels = {
 				value: 'east' | 'south';
 			};
 			removeAi: {
+				index: number;
+			};
+			kick: {
 				index: number;
 			};
 			leave: Record<string, never>;

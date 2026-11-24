@@ -16097,6 +16097,18 @@ export interface Locale extends ILocale {
          */
         "addCpu": string;
         /**
+         * 追放
+         */
+        "kick": string;
+        /**
+         * {name}さんをルームから追放しますか？
+         */
+        "kickConfirm": ParameterizedString<"name">;
+        /**
+         * 部屋主によってルームから追放されました。
+         */
+        "kicked": string;
+        /**
          * ルームが解散されました
          */
         "roomCanceled": string;
