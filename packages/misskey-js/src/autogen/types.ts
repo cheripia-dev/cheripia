@@ -6407,7 +6407,7 @@ export type components = {
             user4Ready: boolean;
             timeLimitForEachTurn: number;
             /** @enum {string} */
-            matchLength: 'east' | 'south';
+            matchLength: 'single' | 'east' | 'south';
             gameState: {
                 [key: string]: unknown;
             } | null;

@@ -100,6 +100,15 @@ function shuffle<T extends unknown[]>(array: T): T {
 }
 
 /**
+ * 対局形式。'single' は1局戦、'east' は東風戦、'south' は東南戦。
+ */
+export type MatchLength = 'single' | 'east' | 'south';
+
+export function isMatchLength(value: unknown): value is MatchLength {
+	return value === 'single' || value === 'east' || value === 'south';
+}
+
+/**
  * デプロイを跨いで読み込まれた旧形式の asking（pon/kan が { caller } 単数）を
  * 新形式（{ callers } 複数）に寄せる。cii・ron には触れない。
  */
@@ -117,7 +126,7 @@ function normalizeAskings(state: MasterState): void {
 		state.riichiTiles = { e: null, s: null, w: null, n: null };
 	}
 	// 旧セーブには対局形式が無いため、欠落・不正値は東南戦 ('south') 扱いとする。
-	if ((state as { matchLength?: unknown }).matchLength !== 'east' && (state as { matchLength?: unknown }).matchLength !== 'south') {
+	if (!isMatchLength((state as { matchLength?: unknown }).matchLength)) {
 		state.matchLength = 'south';
 	}
 }
@@ -321,10 +330,11 @@ export type MasterState = {
 	round: 'e' | 's' | 'w' | 'n';
 	kyoku: number;
 	/**
-	 * 対局形式。'east' は東風戦（東4局の終了で対局終了）、'south' は東南戦（南入あり）。
+	 * 対局形式。'single' は1局戦（東1局の終了で対局終了。途中流局はその局をやり直す）、
+	 * 'east' は東風戦（東4局の終了で対局終了）、'south' は東南戦（南入あり。既定）。
 	 * 旧セーブには存在しないため、読み込み時は 'south' にフォールバックする。
 	 */
-	matchLength: 'east' | 'south';
+	matchLength: MatchLength;
 	turnCount: number;
 	tiles: TileId[];
 	kingTiles: TileId[];
@@ -808,12 +818,18 @@ export class MasterGameEngine {
 		});
 	}
 
-	public commit_nextKyoku(agariHouse: House | null, tenpaiHouses: House[] = []): { ended: boolean } {
+	public commit_nextKyoku(agariHouse: House | null, tenpaiHouses: House[] = [], options: { abortive?: boolean } = {}): { ended: boolean } {
 		const tx = this.startTransaction();
+		const matchLength = tx.$state.matchLength ?? 'south';
 		// 連荘判定: 親（席 'e'）の和了、または流局時の親テンパイなら連荘。
-		const renchan = agariHouse === 'e' || (agariHouse == null && tenpaiHouses.includes('e'));
+		// 1局戦は親連荘でも対局終了するため、同じ局をやり直すのは途中流局の旗 (abortive)
+		// が立ったときだけとする。進行側は親連荘と同じ経路に乗せるので、
+		// 旗が無ければ親の和了・親テンパイ流局と区別できない。
+		const renchan = matchLength === 'single'
+			? options.abortive === true
+			: (agariHouse === 'e' || (agariHouse == null && tenpaiHouses.includes('e')));
 		if (renchan) {
-			const newState = MasterGameEngine.createInitialState({ matchLength: tx.$state.matchLength ?? 'south' });
+			const newState = MasterGameEngine.createInitialState({ matchLength });
 			newState.round = tx.$state.round;
 			newState.kyoku = tx.$state.kyoku;
 			// 点数は席ではなくプレイヤーに紐づくが、席回転しないため写像はそのまま
@@ -836,11 +852,15 @@ export class MasterGameEngine {
 			return { ended: false };
 		}
 
+		// 1局戦は東1局の和了・通常流局で対局終了する（親が流れても同様に終了）。
+		if (matchLength === 'single') {
+			return { ended: true };
+		}
+
 		const nextKyoku = tx.$state.kyoku + 1;
 		// オーラス止め（和了止め）は実装しない。東風戦は東4局の親流れで、
 		// 東南戦は南4局の親流れで単純終了する。東4局の親流れは東南戦のみ南入する。
 		if (nextKyoku > 4) {
-			const matchLength = tx.$state.matchLength ?? 'south';
 			if (tx.$state.round !== 'e' || matchLength === 'east') {
 				return { ended: true };
 			}
@@ -865,7 +885,7 @@ export class MasterGameEngine {
 			return { ended: false };
 		}
 
-		const newState = MasterGameEngine.createInitialState({ matchLength: tx.$state.matchLength ?? 'south' });
+		const newState = MasterGameEngine.createInitialState({ matchLength });
 		newState.round = tx.$state.round;
 		newState.kyoku = nextKyoku;
 		// 点数は席風ではなくプレイヤーに紐づくため、席の移動に合わせて回転させる

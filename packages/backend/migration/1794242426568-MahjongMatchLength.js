@@ -4,7 +4,7 @@
  */
 
 /**
- * 麻雀ルームの対局形式 (`matchLength`: 'east' | 'south') 用カラム。
+ * 麻雀ルームの対局形式 (`matchLength`: 'single' | 'east' | 'south') 用カラム。
  *
  * 現在の麻雀ルームは Redis 上の `MahjongRoom` (MahjongService) と
  * `MasterState` (misskey-mahjong) に保持され、対応する DB テーブルは存在しない。

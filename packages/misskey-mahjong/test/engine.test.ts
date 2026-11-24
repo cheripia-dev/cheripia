@@ -1264,6 +1264,65 @@ describe('Master game engine match length', () => {
 		expect(engine.$state.kyoku).toBe(2);
 		expect(engine.$state.matchLength).toBe('east');
 	});
+
+	it('keeps single match when loading a save', () => {
+		const engine = new MasterGameEngine(createMatchState({ matchLength: 'single', round: 'e', kyoku: 1 }));
+		expect(engine.$state.matchLength).toBe('single');
+	});
+
+	it('ends the match on a non-dealer win at east 1 in single match', () => {
+		const engine = new MasterGameEngine(createMatchState({ matchLength: 'single', round: 'e', kyoku: 1 }));
+		const result = engine.commit_nextKyoku('s', []);
+
+		expect(result).toEqual({ ended: true });
+		// 進行しないため東1局のまま
+		expect(engine.$state.round).toBe('e');
+		expect(engine.$state.kyoku).toBe(1);
+	});
+
+	it('ends the match on a dealer win at east 1 in single match', () => {
+		const engine = new MasterGameEngine(createMatchState({ matchLength: 'single', round: 'e', kyoku: 1 }));
+		const result = engine.commit_nextKyoku('e', []);
+
+		// 親連荘でも対局終了
+		expect(result).toEqual({ ended: true });
+		expect(engine.$state.round).toBe('e');
+		expect(engine.$state.kyoku).toBe(1);
+	});
+
+	it('ends the match on a normal draw with dealer tenpai at east 1 in single match', () => {
+		const engine = new MasterGameEngine(createMatchState({ matchLength: 'single', round: 'e', kyoku: 1 }));
+		const result = engine.commit_nextKyoku(null, ['e']);
+
+		expect(result).toEqual({ ended: true });
+		expect(engine.$state.round).toBe('e');
+		expect(engine.$state.kyoku).toBe(1);
+	});
+
+	it('replays east 1 on abortive draw in single match', () => {
+		// commit_abortiveDraw が本場を +1 済みの状態（東1局・1本場）
+		const engine = new MasterGameEngine(createMatchState({ matchLength: 'single', round: 'e', kyoku: 1, honba: 1, kyotaku: 2 }));
+		const result = engine.commit_nextKyoku(null, ['e'], { abortive: true });
+
+		expect(result).toEqual({ ended: false });
+		expect(engine.$state.round).toBe('e');
+		expect(engine.$state.kyoku).toBe(1);
+		expect(engine.$state.matchLength).toBe('single');
+		// 連荘経路で本場は据え置き（二重加算しない）、供託は引き継ぐ
+		expect(engine.$state.honba).toBe(1);
+		expect(engine.$state.kyotaku).toBe(2);
+	});
+
+	it('advances to east 2 on abortive draw in east match', () => {
+		const engine = new MasterGameEngine(createMatchState({ matchLength: 'east', round: 'e', kyoku: 1, honba: 1 }));
+		const result = engine.commit_nextKyoku(null, ['e'], { abortive: true });
+
+		// 親連荘として同じ局をやり直す（1局戦以外で abortive は進行を止めない）
+		expect(result).toEqual({ ended: false });
+		expect(engine.$state.round).toBe('e');
+		expect(engine.$state.kyoku).toBe(1);
+		expect(engine.$state.honba).toBe(1);
+	});
 });
 
 describe('Master game engine furiten', () => {

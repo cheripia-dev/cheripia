@@ -113,7 +113,7 @@ export const packedMahjongRoomDetailedSchema = {
 		matchLength: {
 			type: 'string',
 			optional: false, nullable: false,
-			enum: ['east', 'south'],
+			enum: ['single', 'east', 'south'],
 		},
 		gameState: {
 			type: 'object',

@@ -4349,6 +4349,7 @@ _mahjong:
   activeRooms: "対局中のルーム"
   noActiveRooms: "対局中のルームはありません"
   matchLength: "対局形式"
+  singleMatch: "1局戦"
   eastMatch: "東風戦"
   southMatch: "東南戦"
   fan: "飜"

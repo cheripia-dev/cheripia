@@ -101,9 +101,10 @@ function createCallingRoom(options: { riichi?: boolean } = {}): MahjongRoom {
 
 function createRedisMock(store = new Map<string, string>()) {
 	const zsets = new Map<string, Map<string, number>>();
+	const sets = new Map<string, Set<string>>();
 	const commands = {
 		del: vi.fn((key: string) => {
-			const deleted = store.delete(key) || zsets.delete(key);
+			const deleted = store.delete(key) || zsets.delete(key) || sets.delete(key);
 			return Promise.resolve(deleted ? 1 : 0);
 		}),
 		get: vi.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
@@ -137,6 +138,30 @@ function createRedisMock(store = new Map<string, string>()) {
 			return Promise.resolve(members.slice(start, stop + 1));
 		}),
 		expire: vi.fn(() => Promise.resolve(1)),
+		sadd: vi.fn((key: string, ...members: string[]) => {
+			let set = sets.get(key);
+			if (set == null) {
+				set = new Set();
+				sets.set(key, set);
+			}
+			let added = 0;
+			for (const member of members) {
+				if (!set.has(member)) {
+					set.add(member);
+					added++;
+				}
+			}
+			return Promise.resolve(added);
+		}),
+		sismember: vi.fn((key: string, member: string) => Promise.resolve(sets.get(key)?.has(member) ? 1 : 0)),
+		srem: vi.fn((key: string, ...members: string[]) => {
+			const set = sets.get(key);
+			let removed = 0;
+			for (const member of members) {
+				if (set?.delete(member)) removed++;
+			}
+			return Promise.resolve(removed);
+		}),
 		keys: vi.fn(() => Promise.reject(new Error('KEYS must not be used'))),
 	};
 	type CommandName = 'del' | 'set' | 'zadd' | 'zrem' | 'expire';
@@ -156,7 +181,7 @@ function createRedisMock(store = new Map<string, string>()) {
 		};
 		return chain;
 	});
-	return { redisClient: { ...commands, multi }, store, zsets };
+	return { redisClient: { ...commands, multi }, store, zsets, sets };
 }
 
 function createCallingService(room: MahjongRoom) {
@@ -441,6 +466,222 @@ describe('MahjongService nextKyokuLocked abortive draw', () => {
 			expect(store.has('mahjong:gameNextKyokuConfirmation:test-room')).toBe(true);
 		} finally {
 			createInitialState.mockRestore();
+			service.dispose();
+		}
+	});
+});
+
+describe('MahjongService nextKyokuLocked single match', () => {
+	function createSingleMatchService(store = new Map<string, string>()) {
+		const published: Array<{ type: string; payload: unknown }> = [];
+		const globalEventService = {
+			publishMahjongRoomStream: (_roomId: string, type: string, payload: unknown) => {
+				published.push({ type, payload });
+			},
+		};
+		const { redisClient } = createRedisMock(store);
+		const service = new MahjongService(
+			redisClient as unknown as ConstructorParameters<typeof MahjongService>[0],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[1],
+			globalEventService as unknown as ConstructorParameters<typeof MahjongService>[2],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
+		);
+		return { service, published, store };
+	}
+
+	function createSingleMatchRoom(preset: Partial<Mmj.MasterState> = {}): MahjongRoom {
+		const room = createRoom();
+		room.matchLength = 'single';
+		room.gameState = Mmj.MasterGameEngine.createInitialState({
+			matchLength: 'single',
+			round: 'e',
+			kyoku: 1,
+			...preset,
+		});
+		return room;
+	}
+
+	// 東1局が終わったとして次局進行を呼ぶ
+	async function nextKyokuFromEast1(
+		service: MahjongService,
+		room: MahjongRoom,
+		kyokuResult: { agariHouse: Mmj.House | null; tenpaiHouses: Mmj.House[]; abortive?: boolean },
+	): Promise<void> {
+		const mj = new Mmj.MasterGameEngine(room.gameState!);
+		await (service as unknown as {
+			nextKyokuLocked: (room: MahjongRoom, mj: Mmj.MasterGameEngine, kyokuResult: { agariHouse: Mmj.House | null; tenpaiHouses: Mmj.House[]; abortive?: boolean }, expected: { round: Mmj.MasterState['round']; kyoku: number; turnCount: number }) => Promise<void>;
+		}).nextKyokuLocked(room, mj, kyokuResult, { round: 'e', kyoku: 1, turnCount: 0 });
+	}
+
+	test('ends the match on a non-dealer win at east 1', async () => {
+		const { service, published } = createSingleMatchService();
+		const room = createSingleMatchRoom();
+		try {
+			await nextKyokuFromEast1(service, room, { agariHouse: 's', tenpaiHouses: [] });
+
+			expect(room.isEnded).toBe(true);
+			const types = published.map(call => call.type);
+			expect(types).toContain('ended');
+			expect(types).not.toContain('nextKyoku');
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('ends the match on a dealer win at east 1', async () => {
+		// 1局戦は親連荘でも対局終了
+		const { service, published } = createSingleMatchService();
+		const room = createSingleMatchRoom();
+		try {
+			await nextKyokuFromEast1(service, room, { agariHouse: 'e', tenpaiHouses: [] });
+
+			expect(room.isEnded).toBe(true);
+			expect(published.map(call => call.type)).toContain('ended');
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('replays east 1 when the finished hand was an abortive draw', async () => {
+		// commit_abortiveDraw が本場を +1 済みの状態
+		const { service, published } = createSingleMatchService();
+		const room = createSingleMatchRoom({ honba: 1 });
+		try {
+			await nextKyokuFromEast1(service, room, { agariHouse: null, tenpaiHouses: ['e'], abortive: true });
+
+			expect(room.isEnded).toBe(false);
+			expect(room.gameState?.round).toBe('e');
+			expect(room.gameState?.kyoku).toBe(1);
+			expect(room.gameState?.matchLength).toBe('single');
+			// 本場は二重加算しない
+			expect(room.gameState?.honba).toBe(1);
+			const types = published.map(call => call.type);
+			expect(types).toContain('nextKyoku');
+			expect(types).not.toContain('ended');
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('advances to east 2 on a non-dealer win at east 1 in a south match', async () => {
+		// 既存の東南戦は従来どおり東2局へ進む
+		const { service, published } = createSingleMatchService();
+		const room = createSingleMatchRoom();
+		room.matchLength = 'south';
+		room.gameState = Mmj.MasterGameEngine.createInitialState({ matchLength: 'south', round: 'e', kyoku: 1 });
+		try {
+			await nextKyokuFromEast1(service, room, { agariHouse: 's', tenpaiHouses: [] });
+
+			expect(room.isEnded).toBe(false);
+			expect(room.gameState?.kyoku).toBe(2);
+			expect(published.map(call => call.type)).toContain('nextKyoku');
+		} finally {
+			service.dispose();
+		}
+	});
+
+	// endKyoku が Redis へ書く待機レコード（次局進行待ち）を作る
+	async function writeWaitingRecord(
+		service: MahjongService,
+		room: MahjongRoom,
+		kyokuResult: { agariHouse: Mmj.House | null; tenpaiHouses: Mmj.House[]; abortive?: boolean },
+	): Promise<void> {
+		const mj = new Mmj.MasterGameEngine(room.gameState!);
+		await (service as unknown as {
+			endKyoku: (room: MahjongRoom, mj: Mmj.MasterGameEngine, kyokuResult: { agariHouse: Mmj.House | null; tenpaiHouses: Mmj.House[]; abortive?: boolean }) => Promise<void>;
+		}).endKyoku(room, mj, kyokuResult);
+	}
+
+	type WaitingRecordView = {
+		confirmation: Record<string, unknown>;
+		kyokuResult: { agariHouse?: Mmj.House | null; tenpaiHouses?: Mmj.House[]; abortive?: boolean };
+		expected: { round: Mmj.MasterState['round']; kyoku: number; turnCount: number };
+	};
+
+	function readWaitingRecord(store: Map<string, string>): WaitingRecordView {
+		const raw = store.get('mahjong:gameNextKyokuConfirmation:test-room');
+		expect(raw).toBeDefined();
+		return JSON.parse(raw!) as WaitingRecordView;
+	}
+
+	// 4席が確認したとして次局進行を進める（進行は Redis から読み直したルームで行われる）
+	async function confirmAllSeats(service: MahjongService, roomId: MahjongRoom['id']): Promise<MahjongRoom> {
+		for (const id of ['user1', 'user2', 'user3', 'user4']) {
+			await service.confirmNextKyoku(roomId, { id } as unknown as MiUser);
+		}
+		const raw = (await service.getRoom(roomId))!;
+		return raw;
+	}
+
+	test('keeps the abortive flag through the redis waiting record', async () => {
+		const { service, store } = createSingleMatchService();
+		const room = createSingleMatchRoom({ honba: 1 });
+		store.set(`mahjong:room:${room.id}`, JSON.stringify(room));
+		try {
+			await writeWaitingRecord(service, room, { agariHouse: null, tenpaiHouses: ['e'], abortive: true });
+
+			expect(readWaitingRecord(store).kyokuResult.abortive).toBe(true);
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('replays east 1 through the confirmNextKyoku fast path', async () => {
+		// 全員確認の高速進行は待機レコードから kyokuResult を復元して進行する
+		const { service, store, published } = createSingleMatchService();
+		const room = createSingleMatchRoom({ honba: 1 });
+		store.set(`mahjong:room:${room.id}`, JSON.stringify(room));
+		try {
+			await writeWaitingRecord(service, room, { agariHouse: null, tenpaiHouses: ['e'], abortive: true });
+			const advanced = await confirmAllSeats(service, room.id);
+
+			expect(advanced.isEnded).toBe(false);
+			expect(advanced.gameState?.round).toBe('e');
+			expect(advanced.gameState?.kyoku).toBe(1);
+			expect(advanced.gameState?.matchLength).toBe('single');
+			expect(advanced.gameState?.honba).toBe(1);
+			expect(published.map(call => call.type)).toContain('nextKyoku');
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('ends the match when a pre-deploy waiting record without the abortive flag is confirmed', async () => {
+		// 旧形式（abortive 無し）は false として復元され、1局戦は対局終了する
+		const { service, store, published } = createSingleMatchService();
+		const room = createSingleMatchRoom();
+		store.set(`mahjong:room:${room.id}`, JSON.stringify(room));
+		try {
+			await writeWaitingRecord(service, room, { agariHouse: 's', tenpaiHouses: [] });
+			const stored = readWaitingRecord(store);
+			delete (stored.kyokuResult as Record<string, unknown>).abortive;
+			store.set('mahjong:gameNextKyokuConfirmation:test-room', JSON.stringify(stored));
+
+			const advanced = await confirmAllSeats(service, room.id);
+
+			expect(advanced.isEnded).toBe(true);
+			expect(published.map(call => call.type)).toContain('ended');
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('recovers with a neutral kyoku result when the waiting record has a broken abortive value', async () => {
+		// 破損値の待機レコードは読み捨てられ、連荘判定なしの中立値で回復する。1局戦では対局終了になる。
+		const { service, store, published } = createSingleMatchService();
+		const room = createSingleMatchRoom();
+		store.set(`mahjong:room:${room.id}`, JSON.stringify(room));
+		try {
+			await writeWaitingRecord(service, room, { agariHouse: null, tenpaiHouses: ['e'], abortive: true });
+			const stored = readWaitingRecord(store);
+			(stored.kyokuResult as Record<string, unknown>).abortive = 'yes';
+			store.set('mahjong:gameNextKyokuConfirmation:test-room', JSON.stringify(stored));
+
+			const advanced = await confirmAllSeats(service, room.id);
+
+			expect(advanced.isEnded).toBe(true);
+			expect(published.map(call => call.type)).toContain('ended');
+		} finally {
 			service.dispose();
 		}
 	});

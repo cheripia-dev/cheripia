@@ -1188,7 +1188,7 @@ export type Channels = {
                 value: number;
             } | {
                 key: 'matchLength';
-                value: 'east' | 'south';
+                value: 'single' | 'east' | 'south';
             };
             removeAi: {
                 index: number;

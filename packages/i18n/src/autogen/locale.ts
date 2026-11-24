@@ -16237,6 +16237,10 @@ export interface Locale extends ILocale {
          */
         "matchLength": string;
         /**
+         * 1局戦
+         */
+        "singleMatch": string;
+        /**
          * 東風戦
          */
         "eastMatch": string;

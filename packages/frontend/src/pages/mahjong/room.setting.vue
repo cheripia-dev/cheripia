@@ -45,7 +45,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 					</MkInput>
 				</div>
 				<div style="margin-top: 8px; font-size: 90%; opacity: 0.8;">
-					{{ i18n.ts._mahjong.matchLength }}: {{ room.matchLength === 'east' ? i18n.ts._mahjong.eastMatch : i18n.ts._mahjong.southMatch }}
+					{{ i18n.ts._mahjong.matchLength }}: {{ matchLengthLabel }}
 				</div>
 				<div v-if="isOwner && !room.isStarted && !room.isEnded" style="margin-top: 8px;">
 					<MkRadios v-model="matchLength" :options="matchLengthOptions"/>
@@ -112,15 +112,23 @@ watch(timeLimit, () => {
 	});
 });
 
-const matchLength = ref<'east' | 'south'>(room.value.matchLength ?? 'south');
+type MatchLength = Misskey.entities.MahjongRoomDetailed['matchLength'];
 
-const matchLengthOptions = [
-	{ value: 'east', label: i18n.ts._mahjong.eastMatch },
-	{ value: 'south', label: i18n.ts._mahjong.southMatch },
-] as MkRadiosOption<string>[];
+const matchLength = ref<MatchLength>(room.value.matchLength ?? 'south');
+
+// 対局形式の value → ラベル。選択肢と現在の表示ラベルの単一の出し所にする
+const matchLengthLabels: Record<MatchLength, string> = {
+	single: i18n.ts._mahjong.singleMatch,
+	east: i18n.ts._mahjong.eastMatch,
+	south: i18n.ts._mahjong.southMatch,
+};
+
+const matchLengthOptions = (Object.keys(matchLengthLabels) as MatchLength[])
+	.map(value => ({ value, label: matchLengthLabels[value] })) satisfies MkRadiosOption<MatchLength>[];
+
+const matchLengthLabel = computed(() => matchLengthLabels[room.value.matchLength]);
 
 watch(matchLength, () => {
-	if (matchLength.value !== 'east' && matchLength.value !== 'south') return;
 	if (matchLength.value === room.value.matchLength) return;
 	room.value.matchLength = matchLength.value;
 	props.connection.send('updateSettings', {

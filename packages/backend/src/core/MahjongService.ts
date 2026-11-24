@@ -41,10 +41,11 @@ export type MahjongRoom = {
 	user4Ready: boolean;
 	timeLimitForEachTurn: number;
 	/**
-	 * 対局形式。'east' は東風戦（東4局で終了）、'south' は東南戦（南入あり。既定）。
+	 * 対局形式。'single' は1局戦（東1局で終了）、'east' は東風戦（東4局で終了）、
+	 * 'south' は東南戦（南入あり。既定）。
 	 * 対局開始前のルーム設定でのみ変更できる。
 	 */
-	matchLength: 'east' | 'south';
+	matchLength: Mmj.MatchLength;
 
 	gameState?: Mmj.MasterState;
 };
@@ -77,9 +78,22 @@ type NextKyokuKey = {
 	turnCount: number;
 };
 
+/**
+ * 次局進行が参照する、終了した局の結果。
+ */
+type KyokuResult = {
+	agariHouse: Mmj.House | null;
+	tenpaiHouses: Mmj.House[];
+	/**
+	 * 九種九牌などの途中流局かどうか。1局戦は途中流局のときだけ同じ局をやり直すため、
+	 * 親連荘として扱う進行と区別する。旧形式の待機レコードには無く、省略時は false。
+	 */
+	abortive?: boolean;
+};
+
 type NextKyokuWaiting = {
 	confirmation: NextKyokuConfirmation;
-	kyokuResult: { agariHouse: Mmj.House | null; tenpaiHouses: Mmj.House[] };
+	kyokuResult: KyokuResult;
 	expected: NextKyokuKey;
 	token?: string;
 };
@@ -116,8 +130,8 @@ const ACTIVE_ROOMS_LIMIT = 30;
 
 function parseRoom(raw: string): MahjongRoom {
 	const parsed = JSON.parse(raw) as MahjongRoom;
-	// matchLength 導入前の既存ルームは東南戦 ('south') 扱いとする。
-	if (parsed.matchLength !== 'east' && parsed.matchLength !== 'south') {
+	// matchLength 導入前の既存ルーム・未知の値は東南戦 ('south') 扱いとする。
+	if (!Mmj.isMatchLength(parsed.matchLength)) {
 		parsed.matchLength = 'south';
 	}
 	return parsed;
@@ -170,12 +184,13 @@ function parseNextKyokuWaiting(raw: string): NextKyokuWaiting | null {
 	if (record.confirmation == null || typeof record.confirmation !== 'object') return null;
 	const confirmation = parseNextKyokuConfirmation(raw);
 	if (confirmation == null) return null;
-	const kyokuResult = record.kyokuResult as { agariHouse?: unknown; tenpaiHouses?: unknown } | null | undefined;
+	const kyokuResult = record.kyokuResult as { agariHouse?: unknown; tenpaiHouses?: unknown; abortive?: unknown } | null | undefined;
 	const expected = record.expected as { round?: unknown; kyoku?: unknown; turnCount?: unknown } | null | undefined;
 	if (kyokuResult == null || typeof kyokuResult !== 'object') return null;
 	if (!Array.isArray(kyokuResult.tenpaiHouses)) return null;
 	if (!kyokuResult.tenpaiHouses.every(isMahjongHouse)) return null;
 	if (kyokuResult.agariHouse != null && !isMahjongHouse(kyokuResult.agariHouse)) return null;
+	if (kyokuResult.abortive != null && typeof kyokuResult.abortive !== 'boolean') return null;
 	if (expected == null || typeof expected !== 'object') return null;
 	if (!isMahjongRound(expected.round)) return null;
 	if (!Number.isInteger(expected.kyoku) || !Number.isInteger(expected.turnCount)) return null;
@@ -184,6 +199,7 @@ function parseNextKyokuWaiting(raw: string): NextKyokuWaiting | null {
 		kyokuResult: {
 			agariHouse: (kyokuResult.agariHouse ?? null) as Mmj.House | null,
 			tenpaiHouses: kyokuResult.tenpaiHouses as Mmj.House[],
+			abortive: kyokuResult.abortive === true,
 		},
 		expected: {
 			round: expected.round as Mmj.MasterState['round'],
@@ -649,7 +665,7 @@ export class MahjongService implements OnApplicationShutdown {
 		}
 
 		if (key === 'matchLength') {
-			if (value !== 'east' && value !== 'south') return;
+			if (!Mmj.isMatchLength(value)) return;
 			room.matchLength = value;
 			await this.saveRoom(room);
 		}
@@ -823,15 +839,17 @@ export class MahjongService implements OnApplicationShutdown {
 		// 中途流局は標準ルールで親の連荘・本場+1・点数移動なし・供託据え置きとする（単純化）。
 		// 既存の流局経路に乗せるため、親連荘となるよう tenpaiHouses ['e'] で endKyoku する
 		//（commit_nextKyoku は親テンパイ流局で連荘する）。
+		// 1局戦は途中流局のときだけ同じ局をやり直すため、abortive を立てる。
+		// 1局戦では親連荘でも対局終了になるため、この旗が無ければ進行は終了側へ落ちる。
 		const result = mj.commit_abortiveDraw(kind);
 		room.gameState = mj.getState();
 		await this.saveRoom(room);
 		this.globalEventService.publishMahjongRoomStream(room.id, 'ryuukyoku', result);
-		await this.endKyoku(room, mj, { agariHouse: null, tenpaiHouses: ['e'] });
+		await this.endKyoku(room, mj, { agariHouse: null, tenpaiHouses: ['e'], abortive: true });
 	}
 
 	@bindThis
-	private watchNextKyokuConfirmation(roomId: MahjongRoom['id'], expected: NextKyokuKey, kyokuResult: { agariHouse: Mmj.House | null; tenpaiHouses: Mmj.House[] }): void {
+	private watchNextKyokuConfirmation(roomId: MahjongRoom['id'], expected: NextKyokuKey, kyokuResult: KyokuResult): void {
 		// NOTE: endKyoku の通常経路と同一待機抑止経路の双方から呼ぶ。キーの内容には触れず監視だけ追加する。
 		const key = `mahjong:gameNextKyokuConfirmation:${roomId}`;
 		const waitingStartedAt = Date.now();
@@ -931,7 +949,7 @@ export class MahjongService implements OnApplicationShutdown {
 	}
 
 	@bindThis
-	private async endKyoku(room: MahjongRoom, mj: Mmj.MasterGameEngine, kyokuResult: { agariHouse: Mmj.House | null; tenpaiHouses: Mmj.House[] }): Promise<void> {
+	private async endKyoku(room: MahjongRoom, mj: Mmj.MasterGameEngine, kyokuResult: KyokuResult): Promise<void> {
 		// NOTE: ロック保持中に呼ぶこと。次局への進行はタイマー発火時に roomId のみから再取得して別ロックで行う。
 		this.clearTurnTimers(room.id);
 
@@ -970,7 +988,7 @@ export class MahjongService implements OnApplicationShutdown {
 	}
 
 	@bindThis
-	private async nextKyokuLocked(room: MahjongRoom, mj: Mmj.MasterGameEngine, kyokuResult: { agariHouse: Mmj.House | null; tenpaiHouses: Mmj.House[] }, expected: NextKyokuKey): Promise<void> {
+	private async nextKyokuLocked(room: MahjongRoom, mj: Mmj.MasterGameEngine, kyokuResult: KyokuResult, expected: NextKyokuKey): Promise<void> {
 		// NOTE: withRoomLock の内側で呼ぶこと（room/mj はロック内で再取得した fresh なもの）。
 		// 冪等ガード: 既に次局へ進行済み（または対局終了済み）なら何もしない
 		if (room.isEnded) {
@@ -992,7 +1010,8 @@ export class MahjongService implements OnApplicationShutdown {
 			return;
 		}
 		// オーラス止め（和了止め）は実装しない。南4局の親流れは単純終了する。
-		const { ended } = mj.commit_nextKyoku(kyokuResult.agariHouse, kyokuResult.tenpaiHouses);
+		// 1局戦は東1局の終了で対局終了し、途中流局のときは同じ局をやり直す（commit_nextKyoku 側で判定）。
+		const { ended } = mj.commit_nextKyoku(kyokuResult.agariHouse, kyokuResult.tenpaiHouses, { abortive: kyokuResult.abortive === true });
 		if (ended) {
 			await this.endGame(room);
 			return;

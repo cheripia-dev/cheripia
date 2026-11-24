@@ -5,7 +5,7 @@
 
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { nextHouse } from 'misskey-mahjong';
+import { isMatchLength, nextHouse } from 'misskey-mahjong';
 import { bindThis } from '@/decorators.js';
 import { MahjongService } from '@/core/MahjongService.js';
 import { maskAnkannedBodyForHouse } from '@/misc/mahjong-stream-mask.js';
@@ -123,7 +123,7 @@ export class MahjongRoomChannel extends Channel {
 					if (typeof body.value !== 'number' || !Number.isInteger(body.value) || body.value < 5 || body.value > 300) return;
 					this.updateSettings(body.key, body.value);
 				} else if (body.key === 'matchLength') {
-					if (body.value !== 'east' && body.value !== 'south') return;
+					if (!isMatchLength(body.value)) return;
 					this.updateSettings(body.key, body.value);
 				}
 				break;
