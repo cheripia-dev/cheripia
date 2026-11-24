@@ -10,7 +10,6 @@ import { describe, test, beforeAll } from 'vitest';
 import type WebSocket from 'ws';
 import type * as misskey from 'misskey-js';
 import { api, signup, connectStream } from '../utils.js';
-import type { UserToken } from '../utils.js';
 
 /** mahjongRoom チャンネルへ送信する (updateSettings など) */
 function sendToChannel(ws: WebSocket, type: string, body: Record<string, unknown>): void {
@@ -24,13 +23,13 @@ function sendToChannel(ws: WebSocket, type: string, body: Record<string, unknown
 	}));
 }
 
-async function createRoom(user: UserToken): Promise<misskey.entities.MahjongRoomDetailed> {
+async function createRoom(user: misskey.entities.SignupResponse): Promise<misskey.entities.MahjongRoomDetailed> {
 	const res = await api('mahjong/create-room', {}, user);
 	assert.strictEqual(res.status, 200);
 	return res.body as misskey.entities.MahjongRoomDetailed;
 }
 
-async function listMahjongInvitations(user: UserToken): Promise<{ id: string; roomId: string }[]> {
+async function listMahjongInvitations(user: misskey.entities.SignupResponse): Promise<{ id: string; roomId: string }[]> {
 	const res = await api('i/notifications', { includeTypes: ['mahjongInvited'], limit: 100 }, user);
 	assert.strictEqual(res.status, 200);
 	return (res.body as misskey.entities.Notification[]).flatMap(notification =>
@@ -38,23 +37,23 @@ async function listMahjongInvitations(user: UserToken): Promise<{ id: string; ro
 	);
 }
 
-async function invite(roomId: string, userId: string, user: UserToken): Promise<{ status: number; body: any }> {
+async function invite(roomId: string, userId: string, user: misskey.entities.SignupResponse): Promise<{ status: number; body: any }> {
 	return await api('mahjong/invite', { roomId, userId }, user);
 }
 
-async function cancelInvite(roomId: string, userId: string, user: UserToken): Promise<{ status: number; body: any }> {
+async function cancelInvite(roomId: string, userId: string, user: misskey.entities.SignupResponse): Promise<{ status: number; body: any }> {
 	return await api('mahjong/cancel-invite', { roomId, userId }, user);
 }
 
-async function joinRoom(roomId: string, user: UserToken): Promise<{ status: number; body: any }> {
+async function joinRoom(roomId: string, user: misskey.entities.SignupResponse): Promise<{ status: number; body: any }> {
 	return await api('mahjong/join-room', { roomId }, user);
 }
 
 describe('Mahjong invitations', () => {
-	let owner: UserToken;
-	let member: UserToken;
-	let guest: UserToken;
-	let outsider: UserToken;
+	let owner: misskey.entities.SignupResponse;
+	let member: misskey.entities.SignupResponse;
+	let guest: misskey.entities.SignupResponse;
+	let outsider: misskey.entities.SignupResponse;
 
 	beforeAll(async () => {
 		owner = await signup({ username: 'mj_owner' });

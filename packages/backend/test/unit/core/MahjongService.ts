@@ -110,7 +110,7 @@ function createRedisMock(store = new Map<string, string>()) {
 			return Promise.resolve(deleted ? 1 : 0);
 		}),
 		get: vi.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
-		set: vi.fn((key: string, value: string) => {
+		set: vi.fn((key: string, value: string, ..._options: unknown[]) => {
 			store.set(key, value);
 			return Promise.resolve('OK');
 		}),
