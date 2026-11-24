@@ -149,5 +149,22 @@ export const packedMahjongRoomDetailedSchema = {
 			optional: false, nullable: true,
 			additionalProperties: true,
 		},
+		timer: {
+			type: 'object',
+			optional: false, nullable: true,
+			description: 'ページを開いた時点でサーバーが数えている残り時間。サーバーが手番待ち・鳴き待ちをしていないときは null。',
+			properties: {
+				mode: {
+					type: 'string',
+					optional: false, nullable: false,
+					enum: ['turn', 'call'],
+				},
+				remainingMs: {
+					type: 'number',
+					optional: false, nullable: false,
+					minimum: 0,
+				},
+			},
+		},
 	},
 } as const;

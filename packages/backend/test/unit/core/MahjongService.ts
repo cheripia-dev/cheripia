@@ -1261,3 +1261,324 @@ describe('MahjongService invitations', () => {
 		}
 	});
 });
+
+describe('MahjongService turn and call deadlines', () => {
+	const TIMER_KEY = 'mahjong:gameTimerDeadline:test-room';
+
+	type TimerRecord = {
+		mode: string;
+		house?: string;
+		turnCount?: number;
+		deadlineAt: number;
+	};
+
+	function createTimerService(room: MahjongRoom, store = new Map<string, string>()) {
+		store.set(`mahjong:room:${room.id}`, JSON.stringify(room));
+		const { redisClient } = createRedisMock(store);
+
+		const service = new MahjongService(
+			redisClient as unknown as ConstructorParameters<typeof MahjongService>[0],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[1],
+			{ publishMahjongRoomStream: () => { } } as unknown as ConstructorParameters<typeof MahjongService>[2],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
+		);
+
+		return { service, store, redisClient };
+	}
+
+	function readTimerRecord(store: Map<string, string>): TimerRecord {
+		const raw = store.get(TIMER_KEY);
+		expect(raw).toBeDefined();
+		return JSON.parse(raw!) as TimerRecord;
+	}
+
+	// e が m5 (17) を捨てると、s がポン・チー・大明槓を同時に要求できる状態。
+	// 山は残りがあり、流局しない枚数にしておく。
+	function createCallAskingState(): Mmj.MasterState {
+		return Mmj.MasterGameEngine.createInitialState({
+			handTiles: {
+				e: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 17],
+				s: [16, 18, 19, 13, 21, 57, 58, 59, 61, 62, 63, 65, 66],
+				w: [22, 23, 24, 26, 27, 28, 30, 31, 32, 34, 35, 36, 38],
+				n: [39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51],
+			},
+			tiles: [52, 53, 54, 55, 56, 60, 64, 67, 68, 69, 70],
+			kingTiles: [125, 126, 127, 128],
+			activatedDorasCount: 1,
+			turn: 'e',
+			turnCount: 5,
+			drawnTile: 17,
+		});
+	}
+
+	// house を手番とした状態。満了時間は room.timeLimitForEachTurn (30秒)。
+	function createTurnState(house: Mmj.House, turnCount: number): Mmj.MasterState {
+		return {
+			...createCallAskingState(),
+			turn: house,
+			drawnTile: null,
+			turnCount,
+		};
+	}
+
+	const seat1 = { id: 'user1' } as unknown as MiUser;
+	const seat2 = { id: 'user2' } as unknown as MiUser;
+	const seat3 = { id: 'user3' } as unknown as MiUser;
+
+	test('waitForTurn writes the turn deadline for a human player', async () => {
+		const room = createRoom();
+		room.gameState = createTurnState('s', 5);
+		const { service, store, redisClient } = createTimerService(room);
+		try {
+			await (service as unknown as {
+				waitForTurn: (room: MahjongRoom, house: Mmj.House, mj: Mmj.MasterGameEngine) => Promise<void>;
+			}).waitForTurn(room, 's', new Mmj.MasterGameEngine(room.gameState));
+
+			const record = readTimerRecord(store);
+			expect(record.mode).toBe('turn');
+			expect(record.house).toBe('s');
+			expect(record.turnCount).toBe(5);
+			// 満了時間は room.timeLimitForEachTurn (30秒)
+			expect(record.deadlineAt - Date.now()).toBeGreaterThan(29000);
+			expect(record.deadlineAt - Date.now()).toBeLessThanOrEqual(30000);
+			// キーの失効は期限そのものに一致させる (EXAT で絶対時刻)
+			const setCall = redisClient.set.mock.calls.find(([key]) => key === TIMER_KEY);
+			expect(setCall?.[2]).toBe('EXAT');
+			expect(setCall?.[3]).toBe(Math.ceil(record.deadlineAt / 1000));
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('waitForTurn does not write a deadline for an AI turn', async () => {
+		const room = createRoom();
+		room.user2Ai = true;
+		room.gameState = createTurnState('s', 5);
+		const { service, store } = createTimerService(room);
+		try {
+			await (service as unknown as {
+				waitForTurn: (room: MahjongRoom, house: Mmj.House, mj: Mmj.MasterGameEngine) => Promise<void>;
+			}).waitForTurn(room, 's', new Mmj.MasterGameEngine(room.gameState));
+
+			expect(store.get(TIMER_KEY)).toBeUndefined();
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('dahai writes the call deadline when the asking starts, and the resolution replaces it', async () => {
+		const room = createRoom();
+		room.gameState = createCallAskingState();
+		const { service, store } = createTimerService(room);
+		vi.useFakeTimers();
+		try {
+			await (service as unknown as {
+				dahaiLocked: (room: MahjongRoom, mj: Mmj.MasterGameEngine, house: Mmj.House, tile: Mmj.TileId, riichi?: boolean) => Promise<void>;
+			}).dahaiLocked(room, new Mmj.MasterGameEngine(room.gameState), 'e', 17);
+
+			const record = readTimerRecord(store);
+			expect(record.mode).toBe('call');
+			expect(record.house).toBeUndefined();
+			expect(record.turnCount).toBe(5);
+			expect(record.deadlineAt - Date.now()).toBeGreaterThan(29000);
+			expect(record.deadlineAt - Date.now()).toBeLessThanOrEqual(30000);
+
+			// s が全ての鳴きを辞退すると、回答待ちの期限は消えて s の手番の期限に置き換わる
+			await service.commit_nop('test-room', seat2);
+			await vi.advanceTimersByTimeAsync(600);
+
+			expect(store.get('mahjong:gameCallingAsking:test-room')).toBeUndefined();
+			const resolved = readTimerRecord(store);
+			expect(resolved.mode).toBe('turn');
+			expect(resolved.house).toBe('s');
+		} finally {
+			service.dispose();
+			vi.useRealTimers();
+		}
+	});
+
+	test('clearTurnWaitingTimer removes the turn waiting and the deadline keys', async () => {
+		const room = createRoom();
+		room.gameState = createTurnState('s', 5);
+		const { service, store } = createTimerService(room);
+		try {
+			await (service as unknown as {
+				waitForTurn: (room: MahjongRoom, house: Mmj.House, mj: Mmj.MasterGameEngine) => Promise<void>;
+			}).waitForTurn(room, 's', new Mmj.MasterGameEngine(room.gameState));
+			expect(store.get(TIMER_KEY)).toBeDefined();
+
+			await (service as unknown as {
+				clearTurnWaitingTimer: (roomId: string) => Promise<void>;
+			}).clearTurnWaitingTimer(room.id);
+
+			expect(store.get(TIMER_KEY)).toBeUndefined();
+			expect(store.get('mahjong:gameTurnWaiting:test-room')).toBeUndefined();
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('endKyoku removes the deadline because the waiting is over', async () => {
+		const room = createRoom();
+		room.gameState = createTurnState('s', 5);
+		const { service, store } = createTimerService(room);
+		try {
+			store.set(TIMER_KEY, JSON.stringify({ mode: 'turn', house: 's', turnCount: 5, deadlineAt: Date.now() + 30000 } satisfies TimerRecord));
+
+			await (service as unknown as {
+				endKyoku: (room: MahjongRoom, mj: Mmj.MasterGameEngine, kyokuResult: { agariHouse: Mmj.House | null; tenpaiHouses: Mmj.House[] }) => Promise<void>;
+			}).endKyoku(room, new Mmj.MasterGameEngine(room.gameState), { agariHouse: null, tenpaiHouses: [] });
+
+			expect(store.get(TIMER_KEY)).toBeUndefined();
+			// 次局確認の待機は始まっている
+			expect(store.get('mahjong:gameNextKyokuConfirmation:test-room')).toBeDefined();
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('packRoom returns the server remaining time for the player whose turn it is', async () => {
+		const room = createRoom();
+		room.gameState = createTurnState('s', 5);
+		const { service, store } = createTimerService(room);
+		try {
+			store.set(TIMER_KEY, JSON.stringify({ mode: 'turn', house: 's', turnCount: 5, deadlineAt: Date.now() + 7000 } satisfies TimerRecord));
+
+			const mine = await service.packRoom(room, seat2);
+			expect(mine.timer).not.toBeNull();
+			expect(mine.timer!.mode).toBe('turn');
+			expect(mine.timer!.remainingMs).toBeGreaterThan(6000);
+			expect(mine.timer!.remainingMs).toBeLessThanOrEqual(7000);
+
+			// 他家には見せない
+			expect((await service.packRoom(room, seat3)).timer).toBeNull();
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('packRoom hides a deadline recorded at a stale turnCount', async () => {
+		const room = createRoom();
+		room.gameState = createTurnState('s', 5);
+		const { service, store } = createTimerService(room);
+		try {
+			// サーバーが既に進行したあと (リロードのあいだに自動進行など) であれば見せない
+			store.set(TIMER_KEY, JSON.stringify({ mode: 'turn', house: 's', turnCount: 4, deadlineAt: Date.now() + 7000 } satisfies TimerRecord));
+
+			expect((await service.packRoom(room, seat2)).timer).toBeNull();
+
+			// 記録した家と現在の要求者が違っていたら見せない
+			store.set(TIMER_KEY, JSON.stringify({ mode: 'turn', house: 'w', turnCount: 5, deadlineAt: Date.now() + 7000 } satisfies TimerRecord));
+
+			expect((await service.packRoom(room, seat2)).timer).toBeNull();
+			expect((await service.packRoom(room, seat3)).timer).toBeNull();
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('packRoom hides a deadline that has already passed', async () => {
+		const room = createRoom();
+		room.gameState = createTurnState('s', 5);
+		const { service, store } = createTimerService(room);
+		try {
+			store.set(TIMER_KEY, JSON.stringify({ mode: 'turn', house: 's', turnCount: 5, deadlineAt: Date.now() - 1000 } satisfies TimerRecord));
+
+			expect((await service.packRoom(room, seat2)).timer).toBeNull();
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('packRoom shows the call remaining time only to the players being asked', async () => {
+		const room = createCallingRoom();
+		const { service, store } = createTimerService(room);
+		try {
+			store.set(TIMER_KEY, JSON.stringify({ mode: 'call', turnCount: 0, deadlineAt: Date.now() + 12000 } satisfies TimerRecord));
+
+			// s (2番席) はロン・ポン・チー・カンを求められている
+			const asked = await service.packRoom(room, seat2);
+			expect(asked.timer).not.toBeNull();
+			expect(asked.timer!.mode).toBe('call');
+			expect(asked.timer!.remainingMs).toBeGreaterThan(11000);
+			expect(asked.timer!.remainingMs).toBeLessThanOrEqual(12000);
+
+			// e (1番席) は捨てた側なので残り時間は表示しない
+			expect((await service.packRoom(room, seat1)).timer).toBeNull();
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('packRoom hides a call deadline from a riichi player asked only to call', async () => {
+		const room = createCallingRoom({ riichi: true });
+		// リーチ中はロンだけを求められるので、ポン単位の問い出しでは残り時間を見せない
+		room.gameState!.askings.ron = null;
+		room.gameState!.askings.cii = null;
+		room.gameState!.askings.kan = null;
+		const { service, store } = createTimerService(room);
+		try {
+			store.set(TIMER_KEY, JSON.stringify({ mode: 'call', turnCount: 0, deadlineAt: Date.now() + 12000 } satisfies TimerRecord));
+
+			expect((await service.packRoom(room, seat2)).timer).toBeNull();
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('packRoom shows the call remaining time to a riichi player asked to ron', async () => {
+		const room = createCallingRoom({ riichi: true });
+		const { service, store } = createTimerService(room);
+		try {
+			store.set(TIMER_KEY, JSON.stringify({ mode: 'call', turnCount: 0, deadlineAt: Date.now() + 12000 } satisfies TimerRecord));
+
+			// createCallingRoom は s にロンも要求している
+			const asked = await service.packRoom(room, seat2);
+			expect(asked.timer!.mode).toBe('call');
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('packRoom hides a call deadline recorded at a stale turnCount', async () => {
+		const room = createCallingRoom();
+		const { service, store } = createTimerService(room);
+		try {
+			store.set(TIMER_KEY, JSON.stringify({ mode: 'call', turnCount: 4, deadlineAt: Date.now() + 12000 } satisfies TimerRecord));
+
+			expect((await service.packRoom(room, seat2)).timer).toBeNull();
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('packRoom returns no remaining time once the game has ended', async () => {
+		const room = createRoom();
+		room.gameState = createTurnState('s', 5);
+		room.isEnded = true;
+		const { service, store } = createTimerService(room);
+		try {
+			store.set(TIMER_KEY, JSON.stringify({ mode: 'turn', house: 's', turnCount: 5, deadlineAt: Date.now() + 7000 } satisfies TimerRecord));
+
+			expect((await service.packRoom(room, seat2)).timer).toBeNull();
+		} finally {
+			service.dispose();
+		}
+	});
+
+	test('packRoomSummary and packSpectatorRoom never expose the remaining time', async () => {
+		const room = createRoom();
+		room.gameState = createTurnState('s', 5);
+		const { service, store } = createTimerService(room);
+		try {
+			store.set(TIMER_KEY, JSON.stringify({ mode: 'turn', house: 's', turnCount: 5, deadlineAt: Date.now() + 7000 } satisfies TimerRecord));
+
+			expect((await service.packRoomSummary(room)).timer).toBeNull();
+			expect((await service.packSpectatorRoom(room)).timer).toBeNull();
+		} finally {
+			service.dispose();
+		}
+	});
+});

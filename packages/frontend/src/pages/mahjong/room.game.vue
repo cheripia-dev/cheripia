@@ -27,7 +27,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 	<div :class="$style.statusBar">
 		<div :class="$style.statusBarLeft">
 			<div :class="$style.roundInfo">{{ roundLabel }}</div>
-			<div v-if="timerVisible" :class="$style.turnTimer">{{ timerLabel }}</div>
+			<div v-if="timerVisible" :class="$style.turnTimer" data-testid="mahjong-turn-timer">{{ timerLabel }}</div>
 		</div>
 		<div v-if="!room.isEnded && props.connection != null && isPlayer" :class="$style.autoModeToggle">
 			<MkButton
@@ -716,9 +716,24 @@ function resetTurnTimer() {
 	startTimer(room.value.timeLimitForEachTurn, 'turn');
 }
 
+/**
+ * ページを開いた時点 (リロード含む) で、サーバーが数え進めた残り時間を使い始める。
+ * サーバーの残り時間が受け取れないとき (サーバーが手番待ち・鳴き待ちをしていない、鳴きを求められて
+ * いないユーザーなど) は、これまでの実装どおり満了時間から始める。
+ */
+function startTimerWithServerRemaining(seconds: number, mode: 'turn' | 'call') {
+	const serverTimer = room.value.timer;
+	const initialSeconds = serverTimer != null && serverTimer.mode === mode && serverTimer.remainingMs > 0
+		? Math.min(seconds, serverTimer.remainingMs / 1000)
+		: seconds;
+	startTimer(initialSeconds, mode);
+}
+
 // 初期表示が0にならないよう、初期状態から期限を設定する
 if (hasCall.value) {
-	startTimer(CALL_SEC, 'call');
+	startTimerWithServerRemaining(CALL_SEC, 'call');
+} else if (isMyTurn.value) {
+	startTimerWithServerRemaining(room.value.timeLimitForEachTurn, 'turn');
 } else {
 	resetTurnTimer();
 }

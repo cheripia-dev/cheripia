@@ -6456,6 +6456,12 @@ export type components = {
             gameState: {
                 [key: string]: unknown;
             } | null;
+            /** @description ページを開いた時点でサーバーが数えている残り時間。サーバーが手番待ち・鳴き待ちをしていないときは null。 */
+            timer: {
+                /** @enum {string} */
+                mode: 'turn' | 'call';
+                remainingMs: number;
+            } | null;
         };
         NoteHistory: {
             /**
@@ -31726,6 +31732,15 @@ export interface operations {
             };
             /** @description I'm Ai */
             418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Too many requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

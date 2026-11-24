@@ -57,6 +57,32 @@ export type MahjongRoom = {
 	invitations: MahjongInvitation[];
 
 	gameState?: Mmj.MasterState;
+
+	/**
+	 * 手番・鳴き待機の残り時間。パック時にサーバーの時計で計算し、ルームには保存しない。
+	 */
+	timer?: MahjongTimer | null;
+};
+
+/** 残り時間の種類。'turn' は手番の満了、'call' は鳴き・ロンの回答待ちの満了。 */
+export type MahjongTimerMode = 'turn' | 'call';
+
+/** クライアントへ返す残り時間。remainingMs はサーバーの時計で計算した残りミリ秒。 */
+export type MahjongTimer = {
+	mode: MahjongTimerMode;
+	remainingMs: number;
+};
+
+/**
+ * Redis に保存する手番・鳴き待機の期限レコード。deadlineAt はサーバー時刻のミリ秒。
+ */
+type MahjongTimerRecord = {
+	mode: MahjongTimerMode;
+	/** 手番の家。'turn' モードで記録し、可視判定に使う。'call' モードでは省略する。 */
+	house?: Mmj.House;
+	/** 待機開始時点の巡目。サーバーが既に進行した期限を使わせないための目印。 */
+	turnCount?: number;
+	deadlineAt: number;
 };
 
 /** ルーム参加者がローカルユーザーへ送った招待 */
@@ -157,6 +183,43 @@ const AUX_KEY_TTL_SECONDS = 60 * 60;
 const ROOM_TTL_SECONDS = 60 * 30;
 
 /**
+ * ゲームの手番および鳴き待機の期限を格納するキー。ページをリロードしたクライアントが、
+ * サーバーの残り時間から数え直せるようにする。保存するレコードは期限とともに失効する。
+ */
+const TIMER_KEY_PREFIX = 'mahjong:gameTimerDeadline:';
+
+function isMahjongTimerMode(value: unknown): value is MahjongTimerMode {
+	return value === 'turn' || value === 'call';
+}
+
+/**
+ * 期限レコードを読む。旧形式・破損値・既に経過した期限は null。
+ */
+function parseMahjongTimerRecord(raw: string): MahjongTimerRecord | null {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return null;
+	}
+	if (parsed == null || typeof parsed !== 'object') return null;
+	const record = parsed as Record<string, unknown>;
+	if (!isMahjongTimerMode(record.mode)) return null;
+	if (typeof record.deadlineAt !== 'number' || !Number.isFinite(record.deadlineAt)) return null;
+	if (record.house != null && !isMahjongHouse(record.house)) return null;
+	if (record.turnCount != null) {
+		if (typeof record.turnCount !== 'number' || !Number.isInteger(record.turnCount) || record.turnCount < 0) return null;
+	}
+	if (record.deadlineAt <= Date.now()) return null;
+	return {
+		mode: record.mode,
+		house: record.house as Mmj.House | undefined,
+		turnCount: record.turnCount as number | undefined,
+		deadlineAt: record.deadlineAt,
+	};
+}
+
+/**
  * 対局中のルームの ID を createdAt (ミリ秒) をスコアとして保持する Sorted Set。
  * saveRoom は対局中のルームを保存するたびに ZADD を実行するため、このインデックスの導入前から続いている対局も次回の保存時に登録される。
  * ルーム本体は TTL で消えるため、本体が消えた ID は getActiveRooms で削除する。
@@ -178,6 +241,8 @@ function parseRoom(raw: string): MahjongRoom {
 	if (!Array.isArray(parsed.invitations)) {
 		parsed.invitations = [];
 	}
+	// 残り時間はパック時に計算する値で、ルームには保存しない
+	if ('timer' in parsed) delete parsed.timer;
 	return parsed;
 }
 
@@ -411,6 +476,65 @@ export class MahjongService implements OnApplicationShutdown {
 	}
 
 	@bindThis
+	private timerKey(roomId: string): string {
+		return `${TIMER_KEY_PREFIX}${roomId}`;
+	}
+
+	/**
+	 * 期限キーを書き込み、キーの TTL を期限そのものと一致させる。
+	 * 明示的な削除を待たずに消えるため、進行済みの期限が残らない。
+	 * 過ぎた期限は、待機がなかったものとして書き込まない。
+	 */
+	@bindThis
+	private async setTimerDeadline(roomId: string, record: MahjongTimerRecord): Promise<void> {
+		if (record.deadlineAt <= Date.now()) return;
+		// キーの失効を期限そのものに一致させる
+		await this.redisClient.set(this.timerKey(roomId), JSON.stringify(record), 'EXAT', Math.ceil(record.deadlineAt / 1000));
+	}
+
+	@bindThis
+	private async clearTimerDeadline(roomId: string): Promise<void> {
+		await this.redisClient.del(this.timerKey(roomId));
+	}
+
+	/**
+	 * ルーム状態と期限キーから、要求したユーザーに見える残り時間を作る。
+	 * 記録した巡目と現在の巡目が食い違っていたら、サーバーが既に進行したとみなして表示しない。
+	 * 'turn' は記録した家と巡目が現在の状態と一致し、そのユーザーが手番のときだけ返す。
+	 * 'call' はそのユーザーがロン・ポン・チー・カンを求められているときだけ返す。
+	 */
+	@bindThis
+	private async getTimerForUser(room: MahjongRoom, mj: Mmj.MasterGameEngine, house: Mmj.House): Promise<MahjongTimer | null> {
+		const raw = await this.redisClient.get(this.timerKey(room.id));
+		if (raw == null) return null;
+		const record = parseMahjongTimerRecord(raw);
+		if (record == null) return null;
+		if (record.turnCount != null && record.turnCount !== mj.$state.turnCount) return null;
+		const visible = record.mode === 'turn'
+			? record.house === house && mj.turn === house
+			: this.isCallAsked(mj, house);
+		if (!visible) return null;
+		return { mode: record.mode, remainingMs: record.deadlineAt - Date.now() };
+	}
+
+	/**
+	 * その家がロン・ポン・チー・カンの回答を求められているか。
+	 * エンジンの createPlayerState が鳴きの選択肢を出す条件 (リーチ中はポン・チー・大明槓を求めない。
+	 * ロンはリーチ中も求められる) と揃え、クライアントが鳴き確認を表示する状態だけを返す。
+	 */
+	@bindThis
+	private isCallAsked(mj: Mmj.MasterGameEngine, house: Mmj.House): boolean {
+		const askings = mj.askings;
+		const canCall = !mj.riichis[house];
+		return (
+			(askings.ron?.callers.includes(house) ?? false) ||
+			(canCall && (askings.pon?.callers.includes(house) ?? false)) ||
+			(canCall && (askings.kan?.callers.includes(house) ?? false)) ||
+			(canCall && askings.cii?.caller === house)
+		);
+	}
+
+	@bindThis
 	private async saveRoom(room: MahjongRoom) {
 		const multi = this.redisClient.multi()
 			.set(`mahjong:room:${room.id}`, JSON.stringify(room), 'EX', ROOM_TTL_SECONDS);
@@ -429,6 +553,7 @@ export class MahjongService implements OnApplicationShutdown {
 		this.clearAllTimers(roomId);
 		await execMulti(this.redisClient.multi()
 			.del(`mahjong:room:${roomId}`)
+			.del(this.timerKey(roomId))
 			.zrem(ACTIVE_ROOMS_KEY, roomId));
 	}
 
@@ -1109,6 +1234,7 @@ export class MahjongService implements OnApplicationShutdown {
 	private async endKyoku(room: MahjongRoom, mj: Mmj.MasterGameEngine, kyokuResult: KyokuResult): Promise<void> {
 		// NOTE: ロック保持中に呼ぶこと。次局への進行はタイマー発火時に roomId のみから再取得して別ロックで行う。
 		this.clearTurnTimers(room.id);
+		await this.clearTimerDeadline(room.id);
 
 		const key = `mahjong:gameNextKyokuConfirmation:${room.id}`;
 		const expected: NextKyokuKey = {
@@ -1193,6 +1319,7 @@ export class MahjongService implements OnApplicationShutdown {
 	@bindThis
 	private async endGame(room: MahjongRoom): Promise<void> {
 		this.clearAllTimers(room.id);
+		await this.clearTimerDeadline(room.id);
 		await this.redisClient.del(`mahjong:gameNextKyokuConfirmation:${room.id}`);
 		room.isEnded = true;
 		room.endedAt = new Date().toISOString();
@@ -1282,6 +1409,11 @@ export class MahjongService implements OnApplicationShutdown {
 			await this.redisClient.set(`mahjong:gameCallingAsking:${room.id}`, JSON.stringify(answers), 'EX', AUX_KEY_TTL_SECONDS);
 			const waitingStartedAt = Date.now();
 			const askingTimeoutMs = room.timeLimitForEachTurn * 1000;
+			await this.setTimerDeadline(room.id, {
+				mode: 'call',
+				turnCount: mj.$state.turnCount,
+				deadlineAt: waitingStartedAt + askingTimeoutMs,
+			});
 			const roomId = room.id;
 			const askingCanPonHouses = [...canPonHouses];
 			const askingCanKanHouses = [...canKanHouses];
@@ -1309,6 +1441,7 @@ export class MahjongService implements OnApplicationShutdown {
 					clearInterval(interval);
 					this.removeTimer(this.otherTimers, roomId, interval);
 					await this.redisClient.del(`mahjong:gameCallingAsking:${roomId}`);
+					await this.clearTimerDeadline(roomId);
 					// タイムアウト時は未回答の caller 全員を辞退扱いにする
 					for (const h of askingCanPonHouses) {
 						if (currentAnswers.pon[h] == null) currentAnswers.pon[h] = false;
@@ -1415,6 +1548,12 @@ export class MahjongService implements OnApplicationShutdown {
 		await this.redisClient.expire(`mahjong:gameTurnWaiting:${room.id}`, AUX_KEY_TTL_SECONDS);
 		const waitingStartedAt = Date.now();
 		const timeoutMs = room.timeLimitForEachTurn * 1000;
+		await this.setTimerDeadline(roomId, {
+			mode: 'turn',
+			house,
+			turnCount: mj.$state.turnCount,
+			deadlineAt: waitingStartedAt + timeoutMs,
+		});
 		const interval = setInterval(async () => {
 			const waiting = await this.redisClient.sismember(`mahjong:gameTurnWaiting:${roomId}`, id);
 			if (waiting === 0) {
@@ -1621,6 +1760,11 @@ export class MahjongService implements OnApplicationShutdown {
 				await this.redisClient.set(`mahjong:gameCallingAsking:${room.id}`, JSON.stringify(answers), 'EX', AUX_KEY_TTL_SECONDS);
 				const waitingStartedAt = Date.now();
 				const kakanAskingTimeoutMs = room.timeLimitForEachTurn * 1000;
+				await this.setTimerDeadline(room.id, {
+					mode: 'call',
+					turnCount: mj.$state.turnCount,
+					deadlineAt: waitingStartedAt + kakanAskingTimeoutMs,
+				});
 				const roomIdForAsking = room.id;
 				const canRonHouses = [...res.canRonHouses];
 				const interval = setInterval(async () => {
@@ -1637,6 +1781,7 @@ export class MahjongService implements OnApplicationShutdown {
 						clearInterval(interval);
 						this.removeTimer(this.otherTimers, roomIdForAsking, interval);
 						await this.redisClient.del(`mahjong:gameCallingAsking:${roomIdForAsking}`);
+						await this.clearTimerDeadline(roomIdForAsking);
 						for (const h of canRonHouses) {
 							if (currentAnswers.ron[h] == null) currentAnswers.ron[h] = false;
 						}
@@ -1834,7 +1979,9 @@ export class MahjongService implements OnApplicationShutdown {
 	@bindThis
 	private async clearTurnWaitingTimer(roomId: MahjongRoom['id']): Promise<void> {
 		this.clearTurnTimers(roomId);
-		await this.redisClient.del(`mahjong:gameTurnWaiting:${roomId}`);
+		await execMulti(this.redisClient.multi()
+			.del(`mahjong:gameTurnWaiting:${roomId}`)
+			.del(this.timerKey(roomId)));
 	}
 
 	@bindThis
@@ -1848,9 +1995,22 @@ export class MahjongService implements OnApplicationShutdown {
 
 	@bindThis
 	public async packRoom(room: MahjongRoom, me: MiUser): Promise<Packed<'MahjongRoomDetailed'>> {
+		let gameState: Mmj.PlayerState | null = null;
+		let timer: MahjongTimer | null = null;
+		if (room.gameState != null) {
+			// 手番・鳴き待機の期限はサーバーの時計で計算し、要求した人に見える分だけ返す
+			const mj = new Mmj.MasterGameEngine(room.gameState);
+			const slot = getSlotOfUserId(room, me.id);
+			if (slot == null) throw new Error('user is not a member of the room');
+			gameState = mj.createPlayerState(slot);
+			if (!room.isEnded) {
+				timer = await this.getTimerForUser(room, mj, mj.getHouse(slot));
+			}
+		}
 		return {
 			...room,
-			gameState: room.gameState != null ? this.packState(room, me) : null,
+			gameState,
+			timer,
 		} as Packed<'MahjongRoomDetailed'>;
 	}
 
@@ -1861,6 +2021,7 @@ export class MahjongService implements OnApplicationShutdown {
 			// ロビー一覧には招待の一覧は不要な上、公開するものではない
 			invitations: [],
 			gameState: null,
+			timer: null,
 		} as Packed<'MahjongRoomDetailed'>;
 	}
 
@@ -1871,6 +2032,8 @@ export class MahjongService implements OnApplicationShutdown {
 			// 観戦者には招待の一覧を見せない
 			invitations: [],
 			gameState: room.gameState != null ? new Mmj.MasterGameEngine(room.gameState).createSpectatorState() : null,
+			// 観戦者には残り時間を使わない (表示がずれても進行に影響しない)
+			timer: null,
 		} as Packed<'MahjongRoomDetailed'>;
 	}
 
