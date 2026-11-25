@@ -33,6 +33,7 @@ export const notificationTypes = [
 	'app',
 	'roleAssigned',
 	'chatRoomInvitationReceived',
+	'mahjongInvited',
 	'achievementEarned',
 	'exportCompleted',
 	'test',

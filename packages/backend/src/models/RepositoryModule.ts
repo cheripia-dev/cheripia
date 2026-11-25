@@ -93,6 +93,7 @@ import {
 	MiChatRoomMembership,
 	MiChatRoomInvitation,
 	MiChatApproval,
+	MiMahjongGameRecord,
 } from './_.js';
 import { NoteHistory } from './NoteHistory.js';
 import type { Provider } from '@nestjs/common';
@@ -596,6 +597,12 @@ const $reversiGamesRepository: Provider = {
 	inject: [DI.db],
 };
 
+const $mahjongGameRecordsRepository: Provider = {
+	provide: DI.mahjongGameRecordsRepository,
+	useFactory: (db: DataSource) => db.getRepository(MiMahjongGameRecord).extend(miRepository as MiRepository<MiMahjongGameRecord>),
+	inject: [DI.db],
+};
+
 const $abuseReportResolversRepository: Provider = {
 	provide: DI.abuseReportResolversRepository,
 	useFactory: (db: DataSource) => db.getRepository(MiAbuseReportResolver).extend(miRepository as MiRepository<MiAbuseReportResolver>),
@@ -700,6 +707,7 @@ const $officialTagRepository: Provider = {
 		$chatApprovalsRepository,
 		$bubbleGameRecordsRepository,
 		$reversiGamesRepository,
+		$mahjongGameRecordsRepository,
 		$abuseReportResolversRepository,
 		$noteHistoryRepository,
 		$officialTagRepository,
@@ -788,6 +796,7 @@ const $officialTagRepository: Provider = {
 		$chatApprovalsRepository,
 		$bubbleGameRecordsRepository,
 		$reversiGamesRepository,
+		$mahjongGameRecordsRepository,
 		$abuseReportResolversRepository,
 		$noteHistoryRepository,
 		$officialTagRepository,

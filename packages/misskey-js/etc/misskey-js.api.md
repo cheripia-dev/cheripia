@@ -1070,6 +1070,167 @@ export type Channels = {
             };
         };
     };
+    mahjongRoom: {
+        params: {
+            roomId: string;
+        };
+        events: {
+            joined: (payload: {
+                index: number;
+                user: UserLite | null;
+            }) => void;
+            left: (payload: {
+                index: number;
+            }) => void;
+            kicked: (payload: {
+                index: number;
+                userId: string;
+            }) => void;
+            canceled: (payload: {
+                userId: string;
+            }) => void;
+            invited: (payload: {
+                user: UserLite;
+                inviterId: string;
+            }) => void;
+            invitationCanceled: (payload: {
+                userId: string;
+            }) => void;
+            inviteOnlyChanged: (payload: {
+                isInviteOnly: boolean;
+            }) => void;
+            changeReadyStates: (payload: {
+                user1: boolean;
+                user2: boolean;
+                user3: boolean;
+                user4: boolean;
+            }) => void;
+            started: (payload: {
+                room: MahjongRoomDetailed;
+            }) => void;
+            nextKyoku: (payload: {
+                room: MahjongRoomDetailed;
+            }) => void;
+            ended: (payload: {
+                room: MahjongRoomDetailed;
+            }) => void;
+            spectatorState: (payload: {
+                room: MahjongRoomDetailed;
+            }) => void;
+            tsumo: (payload: {
+                house: MahjongHouse;
+                tile: number;
+            }) => void;
+            dahai: (payload: {
+                house: MahjongHouse;
+                tile: number;
+                riichi: boolean;
+            }) => void;
+            dahaiAndTsumo: (payload: {
+                dahaiHouse: MahjongHouse;
+                dahaiTile: number;
+                tsumoTile: number;
+                riichi: boolean;
+            }) => void;
+            ponned: (payload: {
+                caller: MahjongHouse;
+                callee: MahjongHouse;
+                tiles: readonly [number, number, number];
+            }) => void;
+            kanned: (payload: {
+                caller: MahjongHouse;
+                callee: MahjongHouse;
+                tiles: readonly [number, number, number, number];
+                rinsyan: number;
+                doraIndicateTiles: number[];
+            }) => void;
+            ciied: (payload: {
+                caller: MahjongHouse;
+                callee: MahjongHouse;
+                tiles: readonly [number, number, number];
+            }) => void;
+            ronned: (payload: {
+                callers: MahjongHouse[];
+                callee: MahjongHouse;
+                handTiles: Record<MahjongHouse, number[]>;
+                ronTile?: number;
+                chankan?: boolean;
+                uraDoraIndicateTiles: number[];
+            }) => void;
+            ryuukyoku: (payload: {
+                tenpaiHouses: MahjongHouse[];
+                notenHouses: MahjongHouse[];
+                pointDeltas: Record<MahjongHouse, number>;
+                abortive?: string;
+                nagashiHouses?: MahjongHouse[];
+            }) => void;
+            ankanned: (payload: {
+                house: MahjongHouse;
+                tiles: readonly [number, number, number, number];
+                rinsyan: number;
+                doraIndicateTiles: number[];
+            }) => void;
+            kakanned: (payload: {
+                house: MahjongHouse;
+                tiles: readonly [number, number, number, number];
+                rinsyan: number;
+                from: MahjongHouse;
+                doraIndicateTiles: number[];
+            }) => void;
+            kakanDeclared: (payload: {
+                house: MahjongHouse;
+                tiles: readonly [number, number, number, number];
+                from: MahjongHouse;
+                doraIndicateTiles: number[];
+            }) => void;
+            tsumoHora: (payload: {
+                house: MahjongHouse;
+                handTiles: number[];
+                tsumoTile: number;
+                uraDoraIndicateTiles: number[];
+            }) => void;
+        };
+        receives: {
+            ready: boolean;
+            addAi: Record<string, never>;
+            updateSettings: {
+                key: 'timeLimitForEachTurn';
+                value: number;
+            } | {
+                key: 'matchLength';
+                value: 'single' | 'east' | 'south';
+            } | {
+                key: 'isInviteOnly';
+                value: boolean;
+            };
+            removeAi: {
+                index: number;
+            };
+            kick: {
+                index: number;
+            };
+            leave: Record<string, never>;
+            confirmNextKyoku: Record<string, never>;
+            dahai: {
+                tile: number;
+                riichi?: boolean;
+            };
+            tsumoHora: Record<string, never>;
+            ronHora: Record<string, never>;
+            pon: Record<string, never>;
+            cii: {
+                pattern: 'x__' | '_x_' | '__x';
+            };
+            kan: Record<string, never>;
+            ankan: {
+                tile: number;
+            };
+            kakan: {
+                tile: number;
+            };
+            nop: Record<string, never>;
+        };
+    };
 };
 
 // @public (undocumented)
@@ -2198,6 +2359,18 @@ declare namespace entities {
         InviteLimitResponse,
         InviteListRequest,
         InviteListResponse,
+        MahjongCancelInviteRequest,
+        MahjongCancelInviteResponse,
+        MahjongCreateRoomResponse,
+        MahjongGamesRequest,
+        MahjongGamesResponse,
+        MahjongInviteRequest,
+        MahjongInviteResponse,
+        MahjongJoinRoomRequest,
+        MahjongJoinRoomResponse,
+        MahjongRoomsResponse,
+        MahjongShowRoomRequest,
+        MahjongShowRoomResponse,
         MetaRequest,
         MetaResponse,
         MiauthGenTokenRequest,
@@ -2490,6 +2663,8 @@ declare namespace entities {
         ChatRoom,
         ChatRoomInvitation,
         ChatRoomMembership,
+        MahjongRoomDetailed,
+        MahjongGameRecord,
         NoteHistory
     }
 }
@@ -3104,6 +3279,48 @@ type IWebhooksTestRequest = operations['i___webhooks___test']['requestBody']['co
 type IWebhooksUpdateRequest = operations['i___webhooks___update']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
+type MahjongCancelInviteRequest = operations['mahjong___cancel-invite']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type MahjongCancelInviteResponse = operations['mahjong___cancel-invite']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type MahjongCreateRoomResponse = operations['mahjong___create-room']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type MahjongGameRecord = components['schemas']['MahjongGameRecord'];
+
+// @public (undocumented)
+type MahjongGamesRequest = operations['mahjong___games']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type MahjongGamesResponse = operations['mahjong___games']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type MahjongInviteRequest = operations['mahjong___invite']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type MahjongInviteResponse = operations['mahjong___invite']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type MahjongJoinRoomRequest = operations['mahjong___join-room']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type MahjongJoinRoomResponse = operations['mahjong___join-room']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type MahjongRoomDetailed = components['schemas']['MahjongRoomDetailed'];
+
+// @public (undocumented)
+type MahjongRoomsResponse = operations['mahjong___rooms']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type MahjongShowRoomRequest = operations['mahjong___show-room']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type MahjongShowRoomResponse = operations['mahjong___show-room']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type MeDetailed = components['schemas']['MeDetailed'];
 
 // @public (undocumented)
@@ -3432,7 +3649,7 @@ type NotificationsCreateRequest = operations['notifications___create']['requestB
 type NotificationsDeleteRequest = operations['notifications___delete']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
-export const notificationTypes: readonly ["note", "follow", "mention", "reply", "renote", "quote", "reaction", "pollEnded", "scheduledNotePosted", "scheduledNotePostFailed", "receiveFollowRequest", "followRequestAccepted", "groupInvited", "app", "roleAssigned", "chatRoomInvitationReceived", "achievementEarned", "exportCompleted", "test", "login", "createToken"];
+export const notificationTypes: readonly ["note", "follow", "mention", "reply", "renote", "quote", "reaction", "pollEnded", "scheduledNotePosted", "scheduledNotePostFailed", "receiveFollowRequest", "followRequestAccepted", "groupInvited", "app", "roleAssigned", "chatRoomInvitationReceived", "mahjongInvited", "achievementEarned", "exportCompleted", "test", "login", "createToken"];
 
 // @public (undocumented)
 export function nyaize(text: string): string;
@@ -4143,8 +4360,9 @@ type VerifyEmailRequest = operations['verify-email']['requestBody']['content']['
 // Warnings were encountered during analysis:
 //
 // src/streaming.ts:57:3 - (ae-forgotten-export) The symbol "ReconnectingWebSocket" needs to be exported by the entry point index.d.ts
-// src/streaming.types.ts:270:4 - (ae-forgotten-export) The symbol "ReversiUpdateKey" needs to be exported by the entry point index.d.ts
-// src/streaming.types.ts:286:4 - (ae-forgotten-export) The symbol "ReversiUpdateSettings" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:271:4 - (ae-forgotten-export) The symbol "ReversiUpdateKey" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:287:4 - (ae-forgotten-export) The symbol "ReversiUpdateSettings" needs to be exported by the entry point index.d.ts
+// src/streaming.types.ts:388:5 - (ae-forgotten-export) The symbol "MahjongHouse" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

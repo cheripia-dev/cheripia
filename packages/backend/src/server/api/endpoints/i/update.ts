@@ -254,6 +254,7 @@ export const paramDef = {
 				groupInvited: notificationRecieveConfig,
 				roleAssigned: notificationRecieveConfig,
 				chatRoomInvitationReceived: notificationRecieveConfig,
+				mahjongInvited: notificationRecieveConfig,
 				achievementEarned: notificationRecieveConfig,
 				app: notificationRecieveConfig,
 				test: notificationRecieveConfig,

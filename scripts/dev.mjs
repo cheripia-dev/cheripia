@@ -267,6 +267,12 @@ try {
 		stderr: process.stderr,
 	});
 
+	startChildProcess('pnpm', ['--filter', 'misskey-mahjong', 'watch', '--no-clean'], {
+		cwd: _dirname + '/../',
+		stdout: process.stdout,
+		stderr: process.stderr,
+	});
+
 	persistentChildProcessesStarted = true;
 	shutdownIfAllPersistentChildProcessesStopped();
 } catch (error) {

@@ -101,6 +101,12 @@ export type MiNotification = {
 	notifierId: MiUser['id'];
 	invitationId: string;
 } | {
+	type: 'mahjongInvited';
+	id: string;
+	createdAt: string;
+	notifierId: MiUser['id'];
+	roomId: string;
+} | {
 	type: 'achievementEarned';
 	id: string;
 	createdAt: string;

@@ -252,6 +252,15 @@ async function composeNotification(data: PushNotificationDataMap[keyof PushNotif
 						],
 					}];
 
+				case 'mahjongInvited':
+					return [i18n.tsx._notification.mahjongInvited({ name: getUserName(data.body.user) }), {
+						body: i18n.ts._mahjong.showRoom,
+						icon: data.body.user.avatarUrl ?? undefined,
+						badge: iconUrl('users'),
+						data,
+						tag: `mahjong:${data.body.roomId}`,
+					}];
+
 				case 'achievementEarned':
 					return [i18n.ts._notification.achievementEarned, {
 						body: i18n.ts._achievements._types[`_${data.body.achievement}`].title,

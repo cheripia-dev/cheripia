@@ -12955,6 +12955,10 @@ export interface Locale extends ILocale {
          */
         "chatRoomInvitationReceived": string;
         /**
+         * {name}から麻雀に招待されました
+         */
+        "mahjongInvited": ParameterizedString<"name">;
+        /**
          * プッシュ通知の更新をしました
          */
         "emptyPushNotificationMessage": string;
@@ -13088,6 +13092,10 @@ export interface Locale extends ILocale {
              * ダイレクトメッセージのグループへ招待された
              */
             "chatRoomInvitationReceived": string;
+            /**
+             * 麻雀に招待された
+             */
+            "mahjongInvited": string;
             /**
              * 実績の獲得
              */
@@ -16066,5 +16074,547 @@ export interface Locale extends ILocale {
          * リアクションする
          */
         "confirm": string;
+    };
+    "_mahjong": {
+        /**
+         * 麻雀
+         */
+        "mahjong": string;
+        /**
+         * ルームに参加
+         */
+        "joinRoom": string;
+        /**
+         * ルームを作成
+         */
+        "createRoom": string;
+        /**
+         * 準備完了
+         */
+        "ready": string;
+        /**
+         * 準備を再開
+         */
+        "cancelReady": string;
+        /**
+         * 退室
+         */
+        "leave": string;
+        /**
+         * CPUを追加
+         */
+        "addCpu": string;
+        /**
+         * 追放
+         */
+        "kick": string;
+        /**
+         * {name}さんをルームから追放しますか？
+         */
+        "kickConfirm": ParameterizedString<"name">;
+        /**
+         * 部屋主によってルームから追放されました。
+         */
+        "kicked": string;
+        /**
+         * ルームが解散されました
+         */
+        "roomCanceled": string;
+        /**
+         * このURLを同じインスタンスのユーザーに共有してください。
+         */
+        "shareUrlHint": string;
+        /**
+         * このルームは招待制です。招待されたユーザーのみ参加できます。
+         */
+        "inviteOnlyShareUrlHint": string;
+        /**
+         * 招待
+         */
+        "invite": string;
+        /**
+         * 招待制
+         */
+        "inviteOnly": string;
+        /**
+         * 招待したユーザーのみが参加できます
+         */
+        "inviteOnlyDescription": string;
+        /**
+         * 招待中のユーザー
+         */
+        "invitedUsers": string;
+        /**
+         * 招待を取り消す
+         */
+        "cancelInvite": string;
+        /**
+         * {name}さんへの招待を取り消しますか？
+         */
+        "cancelInviteConfirm": ParameterizedString<"name">;
+        /**
+         * ルームを見る
+         */
+        "showRoom": string;
+        /**
+         * このルームは招待制のため、参加するには招待が必要です。
+         */
+        "notInvited": string;
+        /**
+         * ルームが見つかりません。
+         */
+        "noSuchRoom": string;
+        /**
+         * そのユーザーは既に招待されています。
+         */
+        "alreadyInvited": string;
+        /**
+         * そのユーザーを招待できません。
+         */
+        "cannotInvite": string;
+        /**
+         * 招待できるのはこのインスタンスのユーザーです。
+         */
+        "notLocalUser": string;
+        /**
+         * ルームが満員です。
+         */
+        "roomFull": string;
+        /**
+         * 対局は既に始まっています。
+         */
+        "gameStarted": string;
+        /**
+         * あなたはルームの参加者ではありません。
+         */
+        "notMember": string;
+        /**
+         * 取り消せる招待がありません。
+         */
+        "noSuchInvitation": string;
+        /**
+         * 招待に失敗しました。
+         */
+        "inviteFailed": string;
+        /**
+         * 東
+         */
+        "east": string;
+        /**
+         * 南
+         */
+        "south": string;
+        /**
+         * 西
+         */
+        "west": string;
+        /**
+         * 北
+         */
+        "north": string;
+        /**
+         * ドラ
+         */
+        "dora": string;
+        /**
+         * 赤ドラ
+         */
+        "redDora": string;
+        /**
+         * ロン
+         */
+        "ron": string;
+        /**
+         * ポン
+         */
+        "pon": string;
+        /**
+         * チー
+         */
+        "cii": string;
+        /**
+         * カン
+         */
+        "kan": string;
+        /**
+         * 暗槓
+         */
+        "ankan": string;
+        /**
+         * 加槓
+         */
+        "kakan": string;
+        /**
+         * ツモ
+         */
+        "tsumo": string;
+        /**
+         * リーチ
+         */
+        "riichi": string;
+        /**
+         * パス
+         */
+        "skip": string;
+        /**
+         * 鳴き無し
+         */
+        "autoNoCall": string;
+        /**
+         * 自動ツモ切り
+         */
+        "autoTsumogiri": string;
+        /**
+         * 自動和了
+         */
+        "autoHora": string;
+        /**
+         * 確認
+         */
+        "confirm": string;
+        /**
+         * 鳴き確認
+         */
+        "callConfirmation": string;
+        /**
+         * 次局確認
+         */
+        "nextKyokuConfirmation": string;
+        /**
+         * 残り {n}s
+         */
+        "remainingSeconds": ParameterizedString<"n">;
+        /**
+         * {n}局
+         */
+        "kyoku": ParameterizedString<"n">;
+        /**
+         * 待ち牌
+         */
+        "waitTiles": string;
+        /**
+         * テンパイ
+         */
+        "tenpai": string;
+        /**
+         * ノーテン
+         */
+        "noten": string;
+        /**
+         * 観戦
+         */
+        "spectate": string;
+        /**
+         * 観戦中
+         */
+        "spectating": string;
+        /**
+         * {name}の視点で観戦
+         */
+        "spectateViewAs": ParameterizedString<"name">;
+        /**
+         * ルームが存在しないか、観戦できません。
+         */
+        "spectateRoomNotFound": string;
+        /**
+         * 観戦できる対局がありません。
+         */
+        "spectateNotStarted": string;
+        /**
+         * 対局は終了しています。
+         */
+        "spectateEnded": string;
+        /**
+         * CPU
+         */
+        "cpu": string;
+        /**
+         * 対局中のルーム
+         */
+        "activeRooms": string;
+        /**
+         * 対局中のルームはありません
+         */
+        "noActiveRooms": string;
+        /**
+         * 自分の対局
+         */
+        "myGames": string;
+        /**
+         * みんなの対局
+         */
+        "allGames": string;
+        /**
+         * 対局履歴はありません
+         */
+        "noGames": string;
+        /**
+         * トビ終了
+         */
+        "tobiEnd": string;
+        /**
+         * 対局形式
+         */
+        "matchLength": string;
+        /**
+         * 1局戦
+         */
+        "singleMatch": string;
+        /**
+         * 東風戦
+         */
+        "eastMatch": string;
+        /**
+         * 東南戦
+         */
+        "southMatch": string;
+        /**
+         * 飜
+         */
+        "fan": string;
+        "_fanNames": {
+            /**
+             * 満貫
+             */
+            "mangan": string;
+            /**
+             * 跳満
+             */
+            "haneman": string;
+            /**
+             * 倍満
+             */
+            "baiman": string;
+            /**
+             * 三倍満
+             */
+            "sanbaiman": string;
+            /**
+             * 役満
+             */
+            "yakuman": string;
+            /**
+             * 数え役満
+             */
+            "kazoeyakuman": string;
+        };
+        "_yakus": {
+            /**
+             * 立直
+             */
+            "riichi": string;
+            /**
+             * 一発
+             */
+            "ippatsu": string;
+            /**
+             * 門前清自摸和
+             */
+            "tsumo": string;
+            /**
+             * 断么
+             */
+            "tanyao": string;
+            /**
+             * 平和
+             */
+            "pinfu": string;
+            /**
+             * 一盃口
+             */
+            "iipeko": string;
+            /**
+             * 東
+             */
+            "field-wind-e": string;
+            /**
+             * 南
+             */
+            "field-wind-s": string;
+            /**
+             * 西
+             */
+            "field-wind-w": string;
+            /**
+             * 北
+             */
+            "field-wind-n": string;
+            /**
+             * 東
+             */
+            "seat-wind-e": string;
+            /**
+             * 南
+             */
+            "seat-wind-s": string;
+            /**
+             * 西
+             */
+            "seat-wind-w": string;
+            /**
+             * 北
+             */
+            "seat-wind-n": string;
+            /**
+             * 白
+             */
+            "white": string;
+            /**
+             * 發
+             */
+            "green": string;
+            /**
+             * 中
+             */
+            "red": string;
+            /**
+             * 嶺上開花
+             */
+            "rinshan": string;
+            /**
+             * 搶槓
+             */
+            "chankan": string;
+            /**
+             * 海底摸月
+             */
+            "haitei": string;
+            /**
+             * 河底撈魚
+             */
+            "hotei": string;
+            /**
+             * 三色同順
+             */
+            "sanshoku-dojun": string;
+            /**
+             * 三色同刻
+             */
+            "sanshoku-doko": string;
+            /**
+             * 一気通貫
+             */
+            "ittsu": string;
+            /**
+             * 混全帯么九
+             */
+            "chanta": string;
+            /**
+             * 七対子
+             */
+            "chitoitsu": string;
+            /**
+             * 対々
+             */
+            "toitoi": string;
+            /**
+             * 三暗刻
+             */
+            "sananko": string;
+            /**
+             * 混老頭
+             */
+            "honroto": string;
+            /**
+             * 三槓子
+             */
+            "sankantsu": string;
+            /**
+             * 小三元
+             */
+            "shosangen": string;
+            /**
+             * ダブル立直
+             */
+            "double-riichi": string;
+            /**
+             * 混一色
+             */
+            "honitsu": string;
+            /**
+             * 清全帯么九
+             */
+            "junchan": string;
+            /**
+             * ニ盃口
+             */
+            "ryampeko": string;
+            /**
+             * 清一色
+             */
+            "chinitsu": string;
+            /**
+             * 国士無双
+             */
+            "kokushi": string;
+            /**
+             * 国士無双十三面待
+             */
+            "kokushi-13": string;
+            /**
+             * 四暗刻
+             */
+            "suanko": string;
+            /**
+             * 四暗刻単騎待
+             */
+            "suanko-tanki": string;
+            /**
+             * 大三元
+             */
+            "daisangen": string;
+            /**
+             * 字一色
+             */
+            "tsuiso": string;
+            /**
+             * 小四喜
+             */
+            "shosushi": string;
+            /**
+             * 大四喜
+             */
+            "daisushi": string;
+            /**
+             * 緑一色
+             */
+            "ryuiso": string;
+            /**
+             * 清老頭
+             */
+            "chinroto": string;
+            /**
+             * 四槓子
+             */
+            "sukantsu": string;
+            /**
+             * 九蓮宝燈
+             */
+            "churen": string;
+            /**
+             * 九連宝灯九面待
+             */
+            "churen-9": string;
+            /**
+             * 天和
+             */
+            "tenho": string;
+            /**
+             * 地和
+             */
+            "chiho": string;
+            /**
+             * 数え役満
+             */
+            "kazoeyakuman": string;
+            /**
+             * 人和
+             */
+            "renhou": string;
+            /**
+             * 流し満貫
+             */
+            "nagashimangan": string;
+        };
     };
 }

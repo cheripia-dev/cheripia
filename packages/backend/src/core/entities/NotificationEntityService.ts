@@ -217,6 +217,9 @@ export class NotificationEntityService implements OnModuleInit {
 			...(notification.type === 'chatRoomInvitationReceived' ? {
 				invitation: chatRoomInvitation,
 			} : {}),
+			...(notification.type === 'mahjongInvited' ? {
+				roomId: notification.roomId,
+			} : {}),
 			...(notification.type === 'followRequestAccepted' ? {
 				message: notification.message,
 			} : {}),

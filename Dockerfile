@@ -30,6 +30,7 @@ COPY --link ["packages/sw/package.json", "./packages/sw/"]
 COPY --link ["packages/misskey-js/package.json", "./packages/misskey-js/"]
 COPY --link ["packages/misskey-reversi/package.json", "./packages/misskey-reversi/"]
 COPY --link ["packages/misskey-bubble-game/package.json", "./packages/misskey-bubble-game/"]
+COPY --link ["packages/misskey-mahjong/package.json", "./packages/misskey-mahjong/"]
 
 ARG NODE_ENV=production
 
@@ -60,6 +61,7 @@ COPY --link ["packages/backend/package.json", "./packages/backend/"]
 COPY --link ["packages/misskey-js/package.json", "./packages/misskey-js/"]
 COPY --link ["packages/misskey-reversi/package.json", "./packages/misskey-reversi/"]
 COPY --link ["packages/misskey-bubble-game/package.json", "./packages/misskey-bubble-game/"]
+COPY --link ["packages/misskey-mahjong/package.json", "./packages/misskey-mahjong/"]
 
 ARG NODE_ENV=production
 
@@ -98,10 +100,12 @@ COPY --chown=misskey:misskey --from=target-builder /cherrypick/packages/backend/
 COPY --chown=misskey:misskey --from=target-builder /cherrypick/packages/misskey-js/node_modules ./packages/misskey-js/node_modules
 COPY --chown=misskey:misskey --from=target-builder /cherrypick/packages/misskey-reversi/node_modules ./packages/misskey-reversi/node_modules
 COPY --chown=misskey:misskey --from=target-builder /cherrypick/packages/misskey-bubble-game/node_modules ./packages/misskey-bubble-game/node_modules
+COPY --chown=misskey:misskey --from=target-builder /cherrypick/packages/misskey-mahjong/node_modules ./packages/misskey-mahjong/node_modules
 COPY --chown=misskey:misskey --from=native-builder /cherrypick/built ./built
 COPY --chown=misskey:misskey --from=native-builder /cherrypick/packages/misskey-js/built ./packages/misskey-js/built
 COPY --chown=misskey:misskey --from=native-builder /cherrypick/packages/misskey-reversi/built ./packages/misskey-reversi/built
 COPY --chown=misskey:misskey --from=native-builder /cherrypick/packages/misskey-bubble-game/built ./packages/misskey-bubble-game/built
+COPY --chown=misskey:misskey --from=native-builder /cherrypick/packages/misskey-mahjong/built ./packages/misskey-mahjong/built
 COPY --chown=misskey:misskey --from=native-builder /cherrypick/packages/backend/built ./packages/backend/built
 COPY --chown=misskey:misskey --from=native-builder /cherrypick/packages/i18n/built ./packages/i18n/built
 COPY --chown=misskey:misskey . ./
