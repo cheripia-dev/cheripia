@@ -39,6 +39,30 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 		</div>
 
+		<MkFolder v-if="$i" :defaultOpen="true">
+			<template #label>{{ i18n.ts._mahjong.myGames }}</template>
+			<MkPagination :paginator="myGamesPaginator">
+				<template #default="{ items }">
+					<div class="_gaps_s">
+						<MkGameRecord v-for="game in items" :key="game.id" :game="game"/>
+					</div>
+				</template>
+				<template #empty><MkResult type="empty" :text="i18n.ts._mahjong.noGames"/></template>
+			</MkPagination>
+		</MkFolder>
+
+		<MkFolder :defaultOpen="false">
+			<template #label>{{ i18n.ts._mahjong.allGames }}</template>
+			<MkPagination :paginator="gamesPaginator">
+				<template #default="{ items }">
+					<div class="_gaps_s">
+						<MkGameRecord v-for="game in items" :key="game.id" :game="game"/>
+					</div>
+				</template>
+				<template #empty><MkResult type="empty" :text="i18n.ts._mahjong.noGames"/></template>
+			</MkPagination>
+		</MkFolder>
+
 		<div class="_panel" style="padding: 16px;">
 			<div style="font-size: 90%; opacity: 0.8;">
 				ルームを作成すると対局URLが発行されます。同じインスタンスのユーザーにURLを共有し、4人揃ったら全員が「準備完了」を押してください。人数が足りない場合はCPUを追加できます。
@@ -49,13 +73,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { computed, ref } from 'vue';
+import { computed, markRaw, ref } from 'vue';
 import * as Misskey from 'misskey-js';
 import { useInterval } from '@@/js/use-interval.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { definePage } from '@/page.js';
 import MkButton from '@/components/MkButton.vue';
+import MkFolder from '@/components/MkFolder.vue';
+import MkPagination from '@/components/MkPagination.vue';
+import { Paginator } from '@/utility/paginator.js';
+import MkGameRecord from './game-record.vue';
 import { i18n } from '@/i18n.js';
+import { $i } from '@/i.js';
 import { useRouter } from '@/router.js';
 import * as os from '@/os.js';
 import { pleaseLogin } from '@/utility/please-login.js';
@@ -63,6 +92,17 @@ import { pleaseLogin } from '@/utility/please-login.js';
 const router = useRouter();
 
 const seatIndexes = [1, 2, 3, 4] as const;
+
+const myGamesPaginator = markRaw(new Paginator('mahjong/games', {
+	limit: 10,
+	params: {
+		my: true,
+	},
+}));
+
+const gamesPaginator = markRaw(new Paginator('mahjong/games', {
+	limit: 10,
+}));
 
 const activeRooms = ref<Misskey.entities.MahjongRoomDetailed[]>([]);
 
@@ -200,4 +240,5 @@ definePage(computed(() => ({
 	font-size: 90%;
 	font-weight: bold;
 }
+
 </style>

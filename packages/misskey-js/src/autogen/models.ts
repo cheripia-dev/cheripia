@@ -72,4 +72,5 @@ export type ChatRoom = components['schemas']['ChatRoom'];
 export type ChatRoomInvitation = components['schemas']['ChatRoomInvitation'];
 export type ChatRoomMembership = components['schemas']['ChatRoomMembership'];
 export type MahjongRoomDetailed = components['schemas']['MahjongRoomDetailed'];
+export type MahjongGameRecord = components['schemas']['MahjongGameRecord'];
 export type NoteHistory = components['schemas']['NoteHistory'];

@@ -2362,6 +2362,8 @@ declare namespace entities {
         MahjongCancelInviteRequest,
         MahjongCancelInviteResponse,
         MahjongCreateRoomResponse,
+        MahjongGamesRequest,
+        MahjongGamesResponse,
         MahjongInviteRequest,
         MahjongInviteResponse,
         MahjongJoinRoomRequest,
@@ -2662,6 +2664,7 @@ declare namespace entities {
         ChatRoomInvitation,
         ChatRoomMembership,
         MahjongRoomDetailed,
+        MahjongGameRecord,
         NoteHistory
     }
 }
@@ -3283,6 +3286,15 @@ type MahjongCancelInviteResponse = operations['mahjong___cancel-invite']['respon
 
 // @public (undocumented)
 type MahjongCreateRoomResponse = operations['mahjong___create-room']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type MahjongGameRecord = components['schemas']['MahjongGameRecord'];
+
+// @public (undocumented)
+type MahjongGamesRequest = operations['mahjong___games']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type MahjongGamesResponse = operations['mahjong___games']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
 type MahjongInviteRequest = operations['mahjong___invite']['requestBody']['content']['application/json'];

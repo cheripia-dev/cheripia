@@ -326,6 +326,7 @@ export * as 'invite/delete' from './endpoints/invite/delete.js';
 export * as 'invite/limit' from './endpoints/invite/limit.js';
 export * as 'invite/list' from './endpoints/invite/list.js';
 export * as 'mahjong/create-room' from './endpoints/mahjong/create-room.js';
+export * as 'mahjong/games' from './endpoints/mahjong/games.js';
 export * as 'mahjong/join-room' from './endpoints/mahjong/join-room.js';
 export * as 'mahjong/invite' from './endpoints/mahjong/invite.js';
 export * as 'mahjong/cancel-invite' from './endpoints/mahjong/cancel-invite.js';

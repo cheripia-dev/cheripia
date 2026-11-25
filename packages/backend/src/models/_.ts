@@ -29,6 +29,7 @@ import { MiChatApproval } from '@/models/ChatApproval.js';
 import { MiChatMessage } from '@/models/ChatMessage.js';
 import { MiChatRoom } from '@/models/ChatRoom.js';
 import { MiChatRoomInvitation } from '@/models/ChatRoomInvitation.js';
+import { MiMahjongGameRecord } from '@/models/MahjongGameRecord.js';
 import { MiChatRoomMembership } from '@/models/ChatRoomMembership.js';
 import { MiClip } from '@/models/Clip.js';
 import { MiClipFavorite } from '@/models/ClipFavorite.js';
@@ -192,6 +193,7 @@ export {
 	MiChatApproval,
 	MiBubbleGameRecord,
 	MiReversiGame,
+	MiMahjongGameRecord,
 };
 
 export type AbuseReportResolversRepository = Repository<MiAbuseReportResolver> & MiRepository<MiAbuseReportResolver>;
@@ -281,5 +283,6 @@ export type ChatRoomInvitationsRepository = Repository<MiChatRoomInvitation> & M
 export type ChatApprovalsRepository = Repository<MiChatApproval> & MiRepository<MiChatApproval>;
 export type BubbleGameRecordsRepository = Repository<MiBubbleGameRecord> & MiRepository<MiBubbleGameRecord>;
 export type ReversiGamesRepository = Repository<MiReversiGame> & MiRepository<MiReversiGame>;
+export type MahjongGameRecordsRepository = Repository<MiMahjongGameRecord> & MiRepository<MiMahjongGameRecord>;
 export type NoteHistoryRepository = Repository<NoteHistory> & MiRepository<NoteHistory>;
 

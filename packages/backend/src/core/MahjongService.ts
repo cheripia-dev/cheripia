@@ -13,6 +13,8 @@ import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { GlobalEventService } from '@/core/GlobalEventService.js';
 import { NotificationService } from '@/core/NotificationService.js';
 import { CacheService } from '@/core/CacheService.js';
+import type { MahjongGameRecordsRepository } from '@/models/_.js';
+import type { MiMahjongGameRecord } from '@/models/MahjongGameRecord.js';
 import { buildRonnedHandTiles } from '@/misc/mahjong-stream-mask.js';
 import { IdService } from '@/core/IdService.js';
 import { Packed } from '@/misc/json-schema.js';
@@ -153,6 +155,12 @@ type KyokuResult = {
 	 */
 	abortive?: boolean;
 };
+
+/**
+ * 対局の終了理由。'tobi' はいずれかの持ち点が0以下になったことによる終了、
+ * 'normal' は規定局数の消化による終了。
+ */
+type MahjongEndReason = 'tobi' | 'normal';
 
 type NextKyokuWaiting = {
 	confirmation: NextKyokuConfirmation;
@@ -417,6 +425,9 @@ export class MahjongService implements OnApplicationShutdown {
 		private idService: IdService,
 		private notificationService: NotificationService,
 		private cacheService: CacheService,
+
+		@Inject(DI.mahjongGameRecordsRepository)
+		private mahjongGameRecordsRepository: MahjongGameRecordsRepository,
 	) {
 	}
 
@@ -1289,14 +1300,14 @@ export class MahjongService implements OnApplicationShutdown {
 		}
 		// トビ終了: いずれかの持ち点が0以下なら次局に進まず対局終了する
 		if (Mmj.isTobiPoints(mj.$state.points)) {
-			await this.endGame(room);
+			await this.endGame(room, mj, 'tobi');
 			return;
 		}
 		// オーラス止め（和了止め）は実装しない。南4局の親流れは単純終了する。
 		// 1局戦は東1局の終了で対局終了し、途中流局のときは同じ局をやり直す（commit_nextKyoku 側で判定）。
 		const { ended } = mj.commit_nextKyoku(kyokuResult.agariHouse, kyokuResult.tenpaiHouses, { abortive: kyokuResult.abortive === true });
 		if (ended) {
-			await this.endGame(room);
+			await this.endGame(room, mj, 'normal');
 			return;
 		}
 		// 2局目以降の新局配牌も親14枚が九種九牌なら中途流局とする。
@@ -1317,7 +1328,7 @@ export class MahjongService implements OnApplicationShutdown {
 	}
 
 	@bindThis
-	private async endGame(room: MahjongRoom): Promise<void> {
+	private async endGame(room: MahjongRoom, mj: Mmj.MasterGameEngine, endReason: MahjongEndReason): Promise<void> {
 		this.clearAllTimers(room.id);
 		await this.clearTimerDeadline(room.id);
 		await this.redisClient.del(`mahjong:gameNextKyokuConfirmation:${room.id}`);
@@ -1325,6 +1336,64 @@ export class MahjongService implements OnApplicationShutdown {
 		room.endedAt = new Date().toISOString();
 		await this.saveRoom(room);
 		this.globalEventService.publishMahjongRoomStream(room.id, 'ended', { room });
+		await this.persistGameResult(room, mj, endReason);
+	}
+
+	/**
+	 * 終局した対局の結果を履歴として永続化する。ルームは Redis のみにあり TTL で
+	 * 消えるため、履歴一覧 (`mahjong/games`) が参照するテーブルへ書き込む。
+	 * 保存失敗は対局終了処理を止めない。
+	 */
+	@bindThis
+	public async persistGameResult(room: MahjongRoom, mj: Mmj.MasterGameEngine, endReason: MahjongEndReason): Promise<void> {
+		try {
+			if (room.startedAt == null || room.endedAt == null) return;
+
+			const seats = ([1, 2, 3, 4] as const).map((slot) => ({
+				slot,
+				userId: room[`user${slot}Id`],
+				isAi: room[`user${slot}Ai`],
+				points: mj.$state.points[mj.$state[`user${slot}House`]],
+			}));
+
+			// 順位は点数の高い順。同点は席順 (user1 > user2 > user3 > user4) を上位とする。
+			const ranked = [...seats].sort((a, b) => b.points - a.points || a.slot - b.slot);
+			const ranks = new Map(ranked.map((s, i) => [s.slot, i + 1]));
+
+			const record: MiMahjongGameRecord = {
+				id: room.id,
+				startedAt: new Date(room.startedAt),
+				endedAt: new Date(room.endedAt),
+				matchLength: room.matchLength ?? 'south',
+				endReason,
+				timeLimitForEachTurn: room.timeLimitForEachTurn,
+				participantIds: seats.filter(s => s.userId != null && !s.isAi).map(s => s.userId as string),
+				user1Id: room.user1Ai ? null : room.user1Id,
+				user1: null,
+				user1Ai: room.user1Ai,
+				user1Points: seats[0].points,
+				user1Rank: ranks.get(1)!,
+				user2Id: room.user2Ai ? null : room.user2Id,
+				user2: null,
+				user2Ai: room.user2Ai,
+				user2Points: seats[1].points,
+				user2Rank: ranks.get(2)!,
+				user3Id: room.user3Ai ? null : room.user3Id,
+				user3: null,
+				user3Ai: room.user3Ai,
+				user3Points: seats[2].points,
+				user3Rank: ranks.get(3)!,
+				user4Id: room.user4Ai ? null : room.user4Id,
+				user4: null,
+				user4Ai: room.user4Ai,
+				user4Points: seats[3].points,
+				user4Rank: ranks.get(4)!,
+			};
+
+			await this.mahjongGameRecordsRepository.insert(record);
+		} catch (err) {
+			console.error('mahjong: failed to persist game result', { roomId: room.id }, err);
+		}
 	}
 
 	@bindThis

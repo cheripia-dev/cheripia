@@ -107,6 +107,8 @@ import MkRadios from '@/components/MkRadios.vue';
 import MkSwitch from '@/components/MkSwitch.vue';
 import * as os from '@/os.js';
 import { useRouter } from '@/router.js';
+import { getMatchLengthLabels } from './match-length-labels.js';
+import type { MatchLength } from './match-length-labels.js';
 
 const $i = ensureSignin();
 
@@ -132,16 +134,10 @@ watch(timeLimit, () => {
 	});
 });
 
-type MatchLength = Misskey.entities.MahjongRoomDetailed['matchLength'];
-
 const matchLength = ref<MatchLength>(room.value.matchLength ?? 'south');
 
 // 対局形式の value → ラベル。選択肢と現在の表示ラベルの単一の出し所にする
-const matchLengthLabels: Record<MatchLength, string> = {
-	single: i18n.ts._mahjong.singleMatch,
-	east: i18n.ts._mahjong.eastMatch,
-	south: i18n.ts._mahjong.southMatch,
-};
+const matchLengthLabels = getMatchLengthLabels();
 
 const matchLengthOptions = (Object.keys(matchLengthLabels) as MatchLength[])
 	.map(value => ({ value, label: matchLengthLabels[value] })) satisfies MkRadiosOption<MatchLength>[];

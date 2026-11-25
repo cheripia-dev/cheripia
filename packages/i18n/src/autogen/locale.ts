@@ -16337,6 +16337,22 @@ export interface Locale extends ILocale {
          */
         "noActiveRooms": string;
         /**
+         * 自分の対局
+         */
+        "myGames": string;
+        /**
+         * みんなの対局
+         */
+        "allGames": string;
+        /**
+         * 対局履歴はありません
+         */
+        "noGames": string;
+        /**
+         * トビ終了
+         */
+        "tobiEnd": string;
+        /**
          * 対局形式
          */
         "matchLength": string;

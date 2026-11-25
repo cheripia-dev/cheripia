@@ -215,3 +215,29 @@ describe('Mahjong invitations', () => {
 		assert.strictEqual(rejoined.body.error.code, 'NOT_INVITED');
 	});
 });
+
+describe('Mahjong game history', () => {
+	test('lists game records without credential', async () => {
+		const res = await api('mahjong/games', {});
+		assert.strictEqual(res.status, 200);
+		assert.ok(Array.isArray(res.body));
+	});
+
+	test('my filter works for a signed-in user', async () => {
+		const user = await signup({ username: 'mj_history_viewer' });
+		const res = await api('mahjong/games', { my: true }, user);
+		assert.strictEqual(res.status, 200);
+		assert.ok(Array.isArray(res.body));
+	});
+
+	test('anonymous my filter yields an empty list', async () => {
+		const res = await api('mahjong/games', { my: true });
+		assert.strictEqual(res.status, 200);
+		assert.deepStrictEqual(res.body, []);
+	});
+
+	test('rejects invalid limit', async () => {
+		const res = await api('mahjong/games', { limit: 0 });
+		assert.strictEqual(res.status, 400);
+	});
+});

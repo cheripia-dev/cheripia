@@ -3199,6 +3199,15 @@ export type paths = {
          */
         post: operations['mahjong___create-room'];
     };
+    '/mahjong/games': {
+        /**
+         * mahjong/games
+         * @description No description provided.
+         *
+         *     **Credential required**: *No*
+         */
+        post: operations['mahjong___games'];
+    };
     '/mahjong/invite': {
         /**
          * mahjong/invite
@@ -6462,6 +6471,43 @@ export type components = {
                 mode: 'turn' | 'call';
                 remainingMs: number;
             } | null;
+        };
+        MahjongGameRecord: {
+            /** Format: id */
+            id: string;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            endedAt: string;
+            /** @enum {string} */
+            matchLength: 'single' | 'east' | 'south';
+            /** @enum {string} */
+            endReason: 'normal' | 'tobi';
+            timeLimitForEachTurn: number;
+            /** Format: id */
+            user1Id: string | null;
+            user1: components['schemas']['UserLite'] | null;
+            user1Ai: boolean;
+            user1Points: number;
+            user1Rank: number;
+            /** Format: id */
+            user2Id: string | null;
+            user2: components['schemas']['UserLite'] | null;
+            user2Ai: boolean;
+            user2Points: number;
+            user2Rank: number;
+            /** Format: id */
+            user3Id: string | null;
+            user3: components['schemas']['UserLite'] | null;
+            user3Ai: boolean;
+            user3Points: number;
+            user3Rank: number;
+            /** Format: id */
+            user4Id: string | null;
+            user4: components['schemas']['UserLite'] | null;
+            user4Ai: boolean;
+            user4Points: number;
+            user4Rank: number;
         };
         NoteHistory: {
             /**
@@ -31768,6 +31814,80 @@ export interface operations {
                 };
                 content: {
                     'application/json': components['schemas']['MahjongRoomDetailed'];
+                };
+            };
+            /** @description Client error */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Authentication error */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Forbidden error */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description I'm Ai */
+            418: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['Error'];
+                };
+            };
+        };
+    };
+    mahjong___games: {
+        requestBody: {
+            content: {
+                'application/json': {
+                    /** @default 10 */
+                    limit?: number;
+                    /** Format: misskey:id */
+                    sinceId?: string;
+                    /** Format: misskey:id */
+                    untilId?: string;
+                    sinceDate?: number;
+                    untilDate?: number;
+                    /** @default false */
+                    my?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description OK (with results) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    'application/json': components['schemas']['MahjongGameRecord'][];
                 };
             };
             /** @description Client error */

@@ -83,6 +83,7 @@ import { ChatService } from './ChatService.js';
 import { RegistryApiService } from './RegistryApiService.js';
 import { ReversiService } from './ReversiService.js';
 import { MahjongService } from './MahjongService.js';
+import { MahjongGameRecordEntityService } from './entities/MahjongGameRecordEntityService.js';
 import { PageService } from './PageService.js';
 
 import { ChartLoggerService } from './chart/ChartLoggerService.js';
@@ -307,6 +308,7 @@ const $FlashEntityService: Provider = { provide: 'FlashEntityService', useExisti
 const $FlashLikeEntityService: Provider = { provide: 'FlashLikeEntityService', useExisting: FlashLikeEntityService };
 const $RoleEntityService: Provider = { provide: 'RoleEntityService', useExisting: RoleEntityService };
 const $ReversiGameEntityService: Provider = { provide: 'ReversiGameEntityService', useExisting: ReversiGameEntityService };
+const $MahjongGameRecordEntityService: Provider = { provide: 'MahjongGameRecordEntityService', useExisting: MahjongGameRecordEntityService };
 const $MetaEntityService: Provider = { provide: 'MetaEntityService', useExisting: MetaEntityService };
 const $SystemWebhookEntityService: Provider = { provide: 'SystemWebhookEntityService', useExisting: SystemWebhookEntityService };
 
@@ -474,6 +476,7 @@ const $ApClipService: Provider = { provide: 'ApClipService', useExisting: ApClip
 		FlashLikeEntityService,
 		RoleEntityService,
 		ReversiGameEntityService,
+		MahjongGameRecordEntityService,
 		MetaEntityService,
 		SystemWebhookEntityService,
 
@@ -638,6 +641,7 @@ const $ApClipService: Provider = { provide: 'ApClipService', useExisting: ApClip
 		$FlashLikeEntityService,
 		$RoleEntityService,
 		$ReversiGameEntityService,
+		$MahjongGameRecordEntityService,
 		$MetaEntityService,
 		$SystemWebhookEntityService,
 
@@ -802,6 +806,7 @@ const $ApClipService: Provider = { provide: 'ApClipService', useExisting: ApClip
 		FlashLikeEntityService,
 		RoleEntityService,
 		ReversiGameEntityService,
+		MahjongGameRecordEntityService,
 		MetaEntityService,
 		SystemWebhookEntityService,
 
@@ -965,6 +970,7 @@ const $ApClipService: Provider = { provide: 'ApClipService', useExisting: ApClip
 		$FlashLikeEntityService,
 		$RoleEntityService,
 		$ReversiGameEntityService,
+		$MahjongGameRecordEntityService,
 		$MetaEntityService,
 		$SystemWebhookEntityService,
 

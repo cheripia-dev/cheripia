@@ -7,6 +7,7 @@ import { describe, expect, test, vi } from 'vitest';
 import * as Mmj from 'misskey-mahjong';
 import { MahjongService, type MahjongRoom } from '@/core/MahjongService.js';
 import type { MiUser } from '@/models/User.js';
+import type { MiMahjongGameRecord } from '@/models/MahjongGameRecord.js';
 
 function createRoom(): MahjongRoom {
 	return {
@@ -205,6 +206,7 @@ function createCallingService(room: MahjongRoom) {
 		{} as unknown as ConstructorParameters<typeof MahjongService>[3],
 		{} as unknown as ConstructorParameters<typeof MahjongService>[4],
 		{} as unknown as ConstructorParameters<typeof MahjongService>[5],
+		{} as unknown as ConstructorParameters<typeof MahjongService>[6],
 	);
 
 	return { service, store };
@@ -238,6 +240,7 @@ describe('MahjongService', () => {
 			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[6],
 		);
 
 		try {
@@ -304,6 +307,7 @@ describe('MahjongService', () => {
 			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[6],
 		);
 
 		try {
@@ -458,6 +462,7 @@ describe('MahjongService nextKyokuLocked abortive draw', () => {
 			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[6],
 		);
 
 		const createInitialState = vi.spyOn(Mmj.MasterGameEngine, 'createInitialState').mockReturnValue(kyushuState);
@@ -497,6 +502,7 @@ describe('MahjongService nextKyokuLocked single match', () => {
 			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[6],
 		);
 		return { service, published, store };
 	}
@@ -709,6 +715,7 @@ describe('MahjongService getActiveRooms', () => {
 			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[6],
 		);
 		const saveRoom = (room: MahjongRoom) => (service as unknown as { saveRoom: (room: MahjongRoom) => Promise<void> }).saveRoom(room);
 		const deleteRoom = (roomId: string) => (service as unknown as { deleteRoom: (roomId: string) => Promise<void> }).deleteRoom(roomId);
@@ -873,6 +880,7 @@ describe('MahjongService kickUser', () => {
 			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[6],
 		);
 
 		return { service, store, published };
@@ -1006,6 +1014,7 @@ describe('MahjongService invitations', () => {
 			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
 			notificationService as unknown as ConstructorParameters<typeof MahjongService>[4],
 			cacheService as unknown as ConstructorParameters<typeof MahjongService>[5],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[6],
 		);
 
 		return { service, store, published, created, deleted };
@@ -1248,6 +1257,7 @@ describe('MahjongService invitations', () => {
 			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[6],
 		);
 		try {
 			const room = await service.getRoom('test-room');
@@ -1283,6 +1293,7 @@ describe('MahjongService turn and call deadlines', () => {
 			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
 			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[6],
 		);
 
 		return { service, store, redisClient };
@@ -1606,5 +1617,145 @@ describe('MahjongService turn and call deadlines', () => {
 		} finally {
 			service.dispose();
 		}
+	});
+});
+
+describe('MahjongService game result persistence', () => {
+	type PersistCall = { record: MiMahjongGameRecord; endReason: string };
+
+	function createPersistService(insert: (record: MiMahjongGameRecord) => Promise<unknown>) {
+		const service = new MahjongService(
+			{} as unknown as ConstructorParameters<typeof MahjongService>[0],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[1],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[2],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[3],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[4],
+			{} as unknown as ConstructorParameters<typeof MahjongService>[5],
+			{ insert } as unknown as ConstructorParameters<typeof MahjongService>[6],
+		);
+		return { service, calls: [] as PersistCall[] };
+	}
+
+	function createStateWithPoints(points: Mmj.MasterState['points'], houses: [Mmj.House, Mmj.House, Mmj.House, Mmj.House]): Mmj.MasterState {
+		const state = Mmj.MasterGameEngine.createInitialState({});
+		state.user1House = houses[0];
+		state.user2House = houses[1];
+		state.user3House = houses[2];
+		state.user4House = houses[3];
+		state.points = points;
+		return state;
+	}
+
+	function endRoom(): MahjongRoom {
+		const room = createRoom();
+		room.endedAt = new Date(1000).toISOString();
+		return room;
+	}
+
+	test('persists final points mapped through seat wind with ranks', async () => {
+		const room = endRoom();
+		// 席と風の対応をずらして、points が風キーであることの影響を確認する
+		const state = createStateWithPoints(
+			{ e: 10, s: 30000, w: 25000, n: -5000 },
+			['s', 'w', 'n', 'e'],
+		);
+		const { service, calls } = createPersistService(record => {
+			calls.push({ record, endReason: 'tobi' });
+			return Promise.resolve();
+		});
+
+		await service.persistGameResult(room, new Mmj.MasterGameEngine(state), 'tobi');
+
+		expect(calls).toHaveLength(1);
+		const record = calls[0].record;
+		expect(record.id).toBe('test-room');
+		expect(record.endReason).toBe('tobi');
+		expect(record.matchLength).toBe('south');
+		expect(record.startedAt).toEqual(new Date(0));
+		expect(record.endedAt).toEqual(new Date(1000));
+		// user1(s)=30000 1位, user2(w)=25000 2位, user4(e)=10 3位, user3(n)=-5000 4位
+		expect(record.user1Points).toBe(30000);
+		expect(record.user1Rank).toBe(1);
+		expect(record.user2Points).toBe(25000);
+		expect(record.user2Rank).toBe(2);
+		expect(record.user3Points).toBe(-5000);
+		expect(record.user3Rank).toBe(4);
+		expect(record.user4Points).toBe(10);
+		expect(record.user4Rank).toBe(3);
+		expect(record.participantIds).toEqual(['user1', 'user2', 'user3', 'user4']);
+		expect(record.user1Id).toBe('user1');
+	});
+
+	test('ranks ties by seat order', async () => {
+		const room = endRoom();
+		const state = createStateWithPoints(
+			{ e: 25000, s: 25000, w: 12000, n: 38000 },
+			['e', 's', 'w', 'n'],
+		);
+		const { service, calls } = createPersistService(record => {
+			calls.push({ record, endReason: 'normal' });
+			return Promise.resolve();
+		});
+
+		await service.persistGameResult(room, new Mmj.MasterGameEngine(state), 'normal');
+
+		const record = calls[0].record;
+		expect(record.user4Rank).toBe(1);
+		expect(record.user1Rank).toBe(2);
+		expect(record.user2Rank).toBe(3);
+		expect(record.user3Rank).toBe(4);
+	});
+
+	test('records AI seats without user ids and excludes them from participants', async () => {
+		const room = endRoom();
+		room.user2Ai = true;
+		room.user4Id = null;
+		room.user4Ai = true;
+		const state = createStateWithPoints(
+			{ e: 30000, s: 25000, w: 20000, n: -5000 },
+			['e', 's', 'w', 'n'],
+		);
+		const { service, calls } = createPersistService(record => {
+			calls.push({ record, endReason: 'tobi' });
+			return Promise.resolve();
+		});
+
+		await service.persistGameResult(room, new Mmj.MasterGameEngine(state), 'tobi');
+
+		const record = calls[0].record;
+		expect(record.user2Ai).toBe(true);
+		expect(record.user2Id).toBeNull();
+		expect(record.user2Points).toBe(25000);
+		expect(record.user2Rank).toBe(2);
+		expect(record.user4Id).toBeNull();
+		expect(record.participantIds).toEqual(['user1', 'user3']);
+	});
+
+	test('skips persistence when the game never started', async () => {
+		const room = createRoom();
+		room.startedAt = null;
+		room.endedAt = new Date(1000).toISOString();
+		const state = createStateWithPoints({ e: 25000, s: 25000, w: 25000, n: 25000 }, ['e', 's', 'w', 'n']);
+		const { service, calls } = createPersistService(record => {
+			calls.push({ record, endReason: 'normal' });
+			return Promise.resolve();
+		});
+
+		await service.persistGameResult(room, new Mmj.MasterGameEngine(state), 'normal');
+
+		expect(calls).toHaveLength(0);
+	});
+
+	test('swallows persistence failures', async () => {
+		const room = endRoom();
+		const state = createStateWithPoints({ e: 25000, s: 25000, w: 25000, n: 25000 }, ['e', 's', 'w', 'n']);
+		const { service, calls } = createPersistService(() => Promise.reject(new Error('db down')));
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+
+		await expect(service.persistGameResult(room, new Mmj.MasterGameEngine(state), 'normal')).resolves.toBeUndefined();
+
+		expect(calls).toHaveLength(0);
+		expect(errorSpy).toHaveBeenCalled();
+		errorSpy.mockRestore();
 	});
 });
