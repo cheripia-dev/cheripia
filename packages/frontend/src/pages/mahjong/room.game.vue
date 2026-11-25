@@ -278,10 +278,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 		</div>
 
-		<XHandTiles :class="$style.handTilesOfMe" :tiles="mj.myHandTiles" :doras="mj.doras" :selectableTiles="spectate ? null : selectableTiles" :separateLast="!spectate && isMyTurn && mj.drawnTile != null" @choose="chooseTile"/>
+		<div :class="$style.myTilesRow">
+			<XHandTiles :class="$style.handTilesOfMe" :tiles="mj.myHandTiles" :doras="mj.doras" :selectableTiles="spectate ? null : selectableTiles" :separateLast="!spectate && isMyTurn && mj.drawnTile != null" @choose="chooseTile"/>
 
-		<div :class="$style.myMeldLine">
-			<XHuro v-for="huro in mj.huros[mj.myHouse]" :class="$style.myHuroItem" :huro="huro" :caller="mj.myHouse" :doras="mj.doras"/>
+			<div :class="$style.myMeldLine">
+				<XHuro v-for="huro in mj.huros[mj.myHouse]" :class="$style.myHuroItem" :huro="huro" :caller="mj.myHouse" :doras="mj.doras"/>
+			</div>
 		</div>
 
 		<div :class="$style.serifContainer">
@@ -2173,6 +2175,8 @@ onUnmounted(() => {
 	top: min(6px, 0.63cqw);
 	right: min(272px, 28.33cqw);
 	white-space: nowrap;
+	// 対面の手牌も副露レーンより前面に置く。
+	z-index: 2;
 }
 .handTileImgOfToimen {
 	display: inline-block;
@@ -2190,6 +2194,8 @@ onUnmounted(() => {
 	top: min(114px, 11.88cqw);
 	left: min(177px, 18.44cqw);
 	width: min(126px, 13.13cqw);
+	// 手牌は副露レーンより前面に置き、副露牌が手牌を覆わないようにする。
+	z-index: 2;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -2203,6 +2209,8 @@ onUnmounted(() => {
 	bottom: min(114px, 11.88cqw);
 	right: min(177px, 18.44cqw);
 	width: min(126px, 13.13cqw);
+	// 上家側と同じく、手牌を副露レーンより前面に置く。
+	z-index: 2;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -2221,20 +2229,15 @@ onUnmounted(() => {
 }
 
 .kamityaMeldLine {
-	// 上家の副露レーンの置き場。手札とは別要素に分離し、手札列と反対側の
-	// 下端に固定する (手札の増減で動かない)。下端は自家手牌の列より上に
-	// 退避させる: 自家手牌は上端 485px (設計値) で、ホバーすると 10px 上がって
-	// 475px。レーンの下端を 450px (bottom 90px) にすると、牌アセットの透明な
-	// 余白 (牌本体より約13px 広い) まで含めて、上家が鳴いた牌が手牌と
-	// 重ならない (従来は bottom 8px で、列を埋めつくす 3〜4組目が
-	// 手牌と交差していた)。
-	// 副露牌は .huroTilesOfKamitya で 0.72 倍に縮める。pon 4組 (1組の軸方向
-	// 占有 109.25px → 99.52px) は高さ 370px に収まりきらず 3+1 で折り返す
-	// ため、折り返した4組目が積まれるレーン下端まで 90px の退避が必要。
+	// 上家の副露レーンの置き場。下端は自家手牌の列より上に退避させる
+	// (自家手牌は上端 485px、ホバー時 475px。レーン下端を 450px = bottom 90px
+	// にすると、牌アセットの透明な余白まで含めて交差しない)。
 	// レーン自体は回転して視覚寸法が入れ替わるため、視覚寸法どおりの箱
 	// (幅126px × 高さ370px) を確保し、レーンはその中心に重ねる。副露がない
 	// 時も箱は確保されるが透明で、河や操作要素の邪魔にはならない
 	// (それらは DOM 後方で上に描かれる)。
+	// 同じ列にある上家自身の手牌は、.huroTilesOfKamitya が折り返した副露の
+	// 列をレーン両端に寄せるため、副露と重ならない。
 	position: absolute;
 	bottom: min(90px, 9.38cqw);
 	left: min(177px, 18.44cqw);
@@ -2245,6 +2248,8 @@ onUnmounted(() => {
 .simotyaMeldLine {
 	// 下家側は上端に固定する (左と対称)。上端は対面手牌の列 (下端 53.9px)
 	// より下に退避させ、下家が鳴いた牌が対面手牌と重ならないようにする。
+	// 上家側と同様に、.huroTilesOfSimotya が折り返した副露の列をレーン両端に
+	// 寄せるため、同じ列にある下家自身の手牌は副露と重ならない。
 	position: absolute;
 	top: min(90px, 9.38cqw);
 	right: min(177px, 18.44cqw);
@@ -2256,24 +2261,36 @@ onUnmounted(() => {
 	flex-shrink: 0;
 }
 
-.myMeldLine {
-	// 自家の副露は手札とは別要素に分離した (ユーザー指示: 同じ帯の中では
-	// 打牌・ツモのたびに手札の幅が変わり、副露が一瞬左右にずれていた)。
-	// 手札の行と同じ下辺で、右端 (下家の名札の内側 178px) に固定し、
-	// 副露は右から順に並ぶ。行に入りきらない分は wrap-reverse で上の行へ
-	// 折り返す (折り返し可はユーザー了承済み)。手札が減るほど副露側へ
-	// 広がり、手札 (左固定) と副露 (右固定) は中央で出会う。
-	// align-items: flex-end で副露の下辺を手札と揃える。
+.myTilesRow {
+	// 手牌と副露は1つのフレックス行を共有する。手牌は幅を保ち、副露は残りの幅だけを
+	// 使うため両者は重ならない。入りきらない副露は wrap-reverse で上の行へ折り返す。
 	position: absolute;
 	bottom: min(5px, 0.52cqw);
 	left: min(252px, 26.29cqw);
 	right: min(178px, 18.54cqw);
 	display: flex;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: 4px;
+}
+
+.myMeldLine {
+	// 自家の副露は手牌と同じ行の右側に置く。手牌の実幅を除いた残りだけが
+	// 副露の領域になるため、手札の枚数が変わっても副露が手牌に潜り込まない。
+	// 副露は実際の麻雀と同じく隙間を空けずに並べる。最も狭い幅でも4副露が
+	// 1行に収まるので、上へ折り返して下家・対面の牌列へ食い込むことがない。
+	// 収まらない場合の折り返し自体は残している。
+	// align-items: flex-end で副露の下辺を手牌と揃える。
+	position: relative;
+	flex: 1 1 auto;
+	min-width: 0;
+	z-index: 1;
+	display: flex;
 	flex-wrap: wrap-reverse;
 	justify-content: flex-end;
 	align-items: flex-end;
-	gap: 4px;
-	// この帯は手牌と重なり、その上に位置しているため、ポインタイベントは手牌に伝わるようにする。
+	gap: 0;
+	// この帯は手牌と隣接し、その上に位置しているため、ポインタイベントは手牌に伝わるようにする。
 	pointer-events: none;
 }
 
@@ -2285,16 +2302,13 @@ onUnmounted(() => {
 }
 
 .handTilesOfMe {
-	// 自家の手札は単独の要素 (副露は .myMeldLine に分離)。
-	// 左端 252px = 13枚時の中央寄せ位置に固定する左寄せ: 鳴いて牌が減っても
-	// 左端は動かず、手札は右側から縮む (ツモ時は右へ伸びる)。
-	// 左端は上家の副露レーン (.kamityaMeldLine) の視覚列より外側にある。
-	// 列はレーンの下端側から約100px/組で埋まり、4組目は中央列 (上端側) へ
-	// 折り返すので、自家手牌 (上端 485px) と交差しない。
-	// nowrap で手札自体の折り返しを禁止する。
-	position: absolute;
-	bottom: min(5px, 0.52cqw);
-	left: min(252px, 26.29cqw);
+	// 手牌は行の左側のフレックス項目 (副露は .myMeldLine)。左端 252px =
+	// 13枚時の中央寄せ位置に固定するので、鳴いて牌が減っても左端は動かず、
+	// 手牌は右側から縮む (ツモ時は右へ伸びる)。nowrap で手牌自体の
+	// 折り返しを禁止する。
+	position: relative;
+	flex-shrink: 0;
+	z-index: 2;
 	text-align: left;
 	white-space: nowrap;
 }
@@ -2319,18 +2333,14 @@ onUnmounted(() => {
 	flex-wrap: wrap-reverse;
 	justify-content: flex-end;
 	align-items: center;
-	align-content: center;
+	// 折り返した副露の列はレーンの両端に寄せ、中央に空く手牌の列を避ける。
+	align-content: space-between;
 	gap: 4px;
 	> .sideHuroItem {
 		// 左右の副露レーンは他家の向きで横向きに積まれるため、自家・対面の
-		// 副露 (0.8 倍) より小さくする。pon 1組の占有は 0.8 倍で 109.25px、
-		// 4組で 433px あり、高さ 370px のレーンでは 3+1 に折り返して
-		// 折り返し先 (中央列) の下端がレーン下端まで届く。0.72 倍なら
-		// 1組 99.52px で、折り返した4組目の下端が自家手牌の上端 (ホバー時
-		// 475px) より 12px 上に空く。
-		// huro.vue の .root (特異度 0,1,0) が同じ要素で --mj-tile-ratio: 0.8 を
-		// 宣言するため、親込み (0,2,0) で上書きする。
-		--mj-tile-ratio: 0.72;
+		// 副露 (0.8 倍) より小さくする。0.68 倍なら折り返した2列をレーン両端に
+		// 寄せたとき、最も狭い舞台幅でも中央の手牌列と重ならない。
+		--mj-tile-ratio: 0.68;
 	}
 }
 
@@ -2351,12 +2361,11 @@ onUnmounted(() => {
 	flex-wrap: wrap;
 	justify-content: flex-end;
 	align-items: center;
-	align-content: center;
+	// 上家側と同じ理屈で、折り返した列をレーン両端に寄せて手牌列を避ける。
+	align-content: space-between;
 	gap: 4px;
 	> .sideHuroItem {
-		// 上家側と同じ理屈で縮める (折り返した4組目の上端が対面手牌の
-		// 下端 53.9px より 23px 下に空く)。
-		--mj-tile-ratio: 0.72;
+		--mj-tile-ratio: 0.68;
 	}
 }
 
