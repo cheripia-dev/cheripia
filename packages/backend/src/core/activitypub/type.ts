@@ -68,6 +68,17 @@ export function getApId(value: string | IObject | undefined): string {
 }
 
 /**
+ * getApId の安全版。
+ * id を判定できない場合に throw せず null を返す。
+ * 連合先が返した未信頼 JSON を検証する箇所(数値・配列・形だけのオブジェクト等の id になり得る値)で使う。
+ */
+export function tryGetApId(value: string | IObject | undefined): string | null {
+	if (typeof value === 'string') return value;
+	if (value != null && typeof value.id === 'string') return value.id;
+	return null;
+}
+
+/**
  * Get ActivityStreams Object type
  *
  * タイプ判定ができなかった場合に、あえてエラーではなくnullを返すようにしている。
@@ -240,6 +251,7 @@ export interface IActor extends IObject {
 	}[];
 	_yojoart_clips?: string | null;
 	playlists?: string | null,
+	_yojoart_decorations?: string | IOrderedCollection;
 }
 
 export const isCollection = (object: IObject): object is ICollection =>
@@ -256,6 +268,9 @@ export const isIOrderedCollectionPage = (object: IObject): object is IOrderedCol
 
 export const isClip = (object: IObject): object is IClip =>
 	getApType(object) === 'Clip' || getApType(object) === 'Playlist';
+
+export const isDecoration = (object: IObject): object is IApDecoration =>
+	getApType(object) === 'Decoration';
 
 export interface IApPropertyValue extends IObject {
 	type: 'PropertyValue';
@@ -350,6 +365,22 @@ export interface IApReversi extends IApGame {
 		ready?: boolean, //準備完了
 		pos?: number, //石配置
 	};
+}
+// cheripia 装飾。アイコンなどに対して付属する画像
+// 幾何系の値はすべてアイコン基準:
+// 既定描画サイズはアイコンの一辺の2倍で、アイコンに対して中央に配置される。
+// angleの回転中心とflipH/flipVの対称軸はアイコンの中心、offsetX/offsetYはアイコン中心からの変位。
+export interface IApDecoration extends IObject {
+	type: 'Decoration',
+	image?: IApImage,
+	required_properties: string[], //必須オプション(対応していないものがあればこのIApDecorationを無視)
+	angle?: number; //radian
+	flipV?: boolean; //上下反転
+	flipH?: boolean; //左右反転
+	offsetX?: number; //アイコンの幅を基準に、そのn倍右側に移動させる
+	offsetY?: number; //アイコンの高さを基準に、そのn倍下側に移動させる
+	scale?: number; //アイコンのサイズを基準に、そのn倍で描画(1 = アイコン一辺と同じ大きさ。既定描画は2)
+	opacity?: number, //不透明度0~1
 }
 export const isGame = (object: IObject): object is IApGame =>
 	getApType(object) === 'Game';

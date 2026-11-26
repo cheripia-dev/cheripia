@@ -350,6 +350,92 @@ describe('Webリソース', () => {
 		});
 	});
 
+	describe('/users/:id/collections/decorations', () => {
+		const path = (id: string): string => `/users/${id}/collections/decorations`;
+
+		let decorationId: string;
+
+		// 管理者としてローカルデコレーションを作成し、aliceに装備する
+		// (既定ポリシーのavatarDecorationLimitは1なので装備できるデコレーションは1つ)
+		beforeAll(async () => {
+			const created = await api('admin/avatar-decorations/create', {
+				name: 'test deco',
+				description: 'test deco description',
+				url: 'https://example.com/deco.png',
+				roleIdsThatCanBeUsedThisDecoration: [],
+			}, alice);
+			decorationId = created.body.id;
+
+			await api('i/update', {
+				avatarDecorations: [{
+					id: decorationId,
+					angle: 0.25,
+					flipH: true,
+					offsetX: 0.1,
+					offsetY: -0.1,
+					scale: 1.2,
+					opacity: 0.5,
+				}],
+			}, alice);
+		});
+
+		test('がActor上の_yojoart_decorationsとして公開されている。', async () => {
+			const res = await ok({
+				path: `/users/${alice.id}`,
+				accept: ONLY_AP,
+				type: AP,
+			});
+			assert.strictEqual(typeof res.body._yojoart_decorations, 'string');
+			assert.ok((res.body._yojoart_decorations as string).endsWith(path(alice.id)));
+		});
+
+		test('が保存単位系(角度は回転比、offset/scaleはデコレーション既定描画サイズ基準)をAP配信単位系(ラジアン・アイコン基準)へ変換したOrderedCollectionを返す。', async () => {
+			const res = await ok({
+				path: path(alice.id),
+				accept: ONLY_AP,
+				type: AP,
+			});
+			assert.strictEqual(res.body.type, 'OrderedCollection');
+			assert.ok((res.body.id as string).endsWith(path(alice.id)));
+			assert.strictEqual(res.body.totalItems, 1);
+			assert.strictEqual(res.body.orderedItems.length, 1);
+
+			const item = res.body.orderedItems[0];
+			assert.strictEqual(item.type, 'Decoration');
+			assert.deepStrictEqual(item.required_properties, []);
+			assert.strictEqual(item.image.url, 'https://example.com/deco.png');
+			assert.strictEqual(item.image.name, 'test deco');
+			assert.strictEqual(item.image.summary, 'test deco description');
+
+			// 保存値のangle 0.25(回転比)は0.25 * 2π radianとして配信され、
+			// 保存基準がデコレーション既定描画サイズ(アイコン一辺の2倍)なのでoffsetX/Y/scaleは2倍になる
+			assert.ok(Math.abs(item.angle - 0.25 * Math.PI * 2) < 1e-9);
+			assert.strictEqual(item.flipH, true);
+			assert.ok(Math.abs(item.offsetX - 0.2) < 1e-9);
+			assert.ok(Math.abs(item.offsetY + 0.2) < 1e-9);
+			assert.ok(Math.abs(item.scale - 2.4) < 1e-9);
+			assert.ok(Math.abs(item.opacity - 0.5) < 1e-9);
+		});
+
+		test('が存在しないユーザーのIDのときActivityPubとしてGETできない。', async () => await notFound({
+			path: path('xxxxxxxx'),
+			accept: ONLY_AP,
+		}));
+
+		test('がfederation === noneのとき403を返す。', async () => {
+			try {
+				await api('admin/update-meta', { federation: 'none' }, alice);
+				await notOk({
+					path: path(alice.id),
+					accept: ONLY_AP,
+					status: 403,
+				});
+			} finally {
+				await api('admin/update-meta', { federation: 'all' }, alice);
+			}
+		});
+	});
+
 	describe('/notes/:id', () => {
 		const path = (noteId: string): string => `/notes/${noteId}`;
 

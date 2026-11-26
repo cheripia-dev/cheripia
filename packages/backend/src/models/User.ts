@@ -366,6 +366,11 @@ export class MiUser {
 	})
 	@JoinColumn()
 	public channel: MiChannel | null;
+
+	@Column('varchar', {
+		length: 512, nullable: true,
+	})
+	public decorationsUri: string | null;
 }
 
 export type MiLocalUser = MiUser & {
