@@ -681,6 +681,74 @@ describe('AvatarDecorationService', () => {
 		});
 	});
 
+	describe('getRawUrl', () => {
+		// 上の集約テストと同じく、テスト用hostに限定したUNIQUE式インデックスを一時的に作って
+		// 本番の(host, md5(rawUrl))制約を再現し、後片付けで削除する
+		test('rawUrlが無い行への書き込みが(host, rawUrl)衝突でunique_violationになっても例外にせずURLを返す', async () => {
+			const host = uniqueHost();
+			const indexName = `test_uq_ad_host_raw_md5_${secureRndstr(6).toLowerCase()}`;
+			await avatarDecorationsRepository.query(`CREATE UNIQUE INDEX "${indexName}" ON "avatar_decoration" ("host", md5("rawUrl")) WHERE "host" = '${host}'`);
+
+			try {
+				// fetchRemoteDecorationsが/api/get-avatar-decorationsを引けるための対応ソフト登録
+				await instancesRepository.insertOne({
+					id: genAidx(Date.now()),
+					firstRetrievedAt: new Date(),
+					host,
+					softwareName: 'misskey',
+				});
+
+				const sharedUrl = `https://${host}/files/shared.png`;
+				// 行A: rawUrl=NULLの旧リモート行(UNIQUEインデックスではNULL行は制約対象外で、migrationのバックフィルも無い)
+				// 行B: 同じhostに同じrawUrlを持つ既存行。AへURLを書き込むとUNIQUEに違反する
+				const rowA = await avatarDecorationsRepository.insertOne({
+					id: genAidx(Date.now()),
+					url: `https://proxy.example/${host}/files/a.png`,
+					rawUrl: null,
+					name: 'deco a',
+					description: '',
+					host,
+					remoteId: 'a',
+				});
+				const rowB = await avatarDecorationsRepository.insertOne({
+					id: genAidx(Date.now()),
+					url: sharedUrl,
+					rawUrl: sharedUrl,
+					name: 'deco b',
+					description: '',
+					host,
+					remoteId: 'b',
+				});
+
+				// /api/get-avatar-decorationsはAの項目がBと同じURLへ変更された応答を返す
+				const sendSpy = vi.spyOn(httpRequestService, 'send').mockImplementation(async () => ({
+					json: async () => [{ id: 'a', name: 'deco a', description: 'desc a', url: sharedUrl }],
+				}) as never);
+
+				try {
+					const decoration = await avatarDecorationsRepository.findOneByOrFail({ id: rowA.id });
+					const result = await avatarDecorationService.getRawUrl(decoration);
+
+					// 衝突でUPDATEは失敗するが、呼び出し側が使うURLはそのまま返る
+					expect(result).toBe(sharedUrl);
+
+					// 行AのrawUrlは未設定のまま(衝突による未保存)、行Bは書き換えられない
+					const afterA = await avatarDecorationsRepository.findOneByOrFail({ id: rowA.id });
+					expect(afterA.rawUrl).toBeNull();
+					const afterB = await avatarDecorationsRepository.findOneByOrFail({ id: rowB.id });
+					expect(afterB.rawUrl).toBe(sharedUrl);
+					expect(afterB.remoteId).toBe('b');
+				} finally {
+					sendSpy.mockRestore();
+				}
+			} finally {
+				await avatarDecorationsRepository.query(`DROP INDEX IF EXISTS "${indexName}"`);
+				await avatarDecorationsRepository.delete({ host });
+				await instancesRepository.delete({ host });
+			}
+		});
+	});
+
 	describe('renderDecorations', () => {
 		test('保存単位系をAP配信単位系(radian・アイコン基準)へ変換し、受信側で逆変換すると往復一致する', async () => {
 			const decoration = await avatarDecorationsRepository.insertOne({

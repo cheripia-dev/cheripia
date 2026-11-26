@@ -77,7 +77,8 @@ describe.runIf(process.env.DECORATION_BENCH === 'true')('AvatarDecorationBench: 
 			await runner.query('SET maintenance_work_mem = \'512MB\'');
 			await runner.query(`DELETE FROM avatar_decoration WHERE host LIKE '%${BENCH_HOST_SUFFIX}'`);
 			await runner.query(`DELETE FROM "user" WHERE host LIKE '%${BENCH_HOST_SUFFIX}'`);
-			// 本番マイグレーション 1795147371786 と同一の式インデックス
+			// 本番マイグレーション(整理1795147371786 + UNIQUE作成1795698643579)と同一の式インデックス。
+			// ベンチはsynchronizeのテストDBに手作りするのでUNIQUE外で作る(大量seedが衝突するため)
 			await runner.query(`CREATE INDEX IF NOT EXISTS "IDX_avatar_decoration_host_raw_url_md5" ON "avatar_decoration" ("host", md5("rawUrl"))`);
 			await runner.query(`
 				CREATE OR REPLACE FUNCTION bench_b36n(n bigint) RETURNS text AS $$

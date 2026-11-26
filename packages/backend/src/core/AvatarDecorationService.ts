@@ -793,7 +793,15 @@ export class AvatarDecorationService implements OnApplicationShutdown {
 
 		const remoteUrl = await this.fetchRemoteDecorations(decoration.id);
 		if (remoteUrl) {
-			await this.update(decoration.id, { rawUrl: remoteUrl });
+			// rawUrlの無い旧リモート行(host, rawUrlのUNIQUEインデックスではNULL行は制約対象外)へ
+			// 後からURLを書き込むと、同じhostに同じURLの行が既に存在してunique_violationになり得る。
+			// 呼び出し側(admin copy)はURLだけを必要とし、rawUrlの保存は次回取得時の再試行に任せて
+			// 複製キーエラーだけ握りつぶす(他のエラーは従来どおり投げる)
+			try {
+				await this.update(decoration.id, { rawUrl: remoteUrl });
+			} catch (err) {
+				if (!isDuplicateKeyValueError(err)) throw err;
+			}
 		}
 		return remoteUrl;
 	}
